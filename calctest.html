@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>통신비 계산기 by Bak2ya</title>
+    <style>
+    /*input type number 에서 옆에 스핀버튼 안나오게 하기*/
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    /*id,name에 맞게 입력창 크기 유지*/
+    #phone{width:5em;}
+    .months{width:2em;}
+    .cost{width:4em;}
+
+    </style>
+
+    <script>
+    //필요한거: 모든칸이 입력되지 않고 [계산하기]를 누를경우 모든 창을 채워달라는 alert 메시지 표시
+    // https://runtoyourdream.tistory.com/203
+    //고민할거: SKT이외 추가할인 적용을 어떻게 할것인가.
+
+      function calc(){//계산기
+        //일단 입력받는 값들 다 var로 지정하기
+        var tablename =document.getElementById("tablename").value;
+        var phone     =document.getElementById("phone").value;
+        var plan      =document.getElementById("plan").value;
+        //선약 체크박스 확인하고 true=0.75,  false=1로 하는 수식
+        var choice25  =document.getElementsByName("choice25").value;
+        var choice;
+        if(choice25 == true){
+          choice = '0.75';
+          }else{choice = '1';}
+
+        var period    =document.getElementsByName("period").value;
+        //계약기간은 24일경우 24, 36인경우 36입력받음
+
+        var planmonth =document.getElementById("planmonth").value;
+        var afterplan =document.getElementById("afterplan").value;
+
+        var addiscunt =document.getElementsByName("discount").value;
+        //추가할인은 SKT온가족할인 기준 없을때 1, 있을때 각각 0.9, 0.7을 입력받음
+
+        var bu1       =document.getElementById("bu1").value;
+        var bu1m      =document.getElementById("bu1m").value;
+        var bu2       =document.getElementById("bu2").value;
+        var bu2m      =document.getElementById("bu2m").value;
+
+        //통신요금: (필수요금제*필수기간 + 이후 요금제*잔여기간(계약기간-필수기간))*온가족*선약
+        //부가서비스: (부가요금*부가기간)+(부가요금*부가기간)
+        //계산식: (할부원금 + 통신요금 + 부가서비스)= 총비용. 월비용 : 총비용/계약기간
+        var plancost  = (parseInt(plan)*parseInt(planmonth) + parseInt(afterplan)*(parseInt(period)-parseInt(planmonth)))*parseFloat(discount)*parseFloat(choice)
+        var totalbu   = parseInt(bu1)*parseInt(bu1m) + parseInt(bu2)*parseInt(bu2m)
+        var total     = parseInt(phone) + parseFloat(plancost) + parseInt(totalbu)
+        var totalavg  = parseFloat(total) / parseInt(period)
+        var plancostavg = parseFloat(plancost) / parseInt(period)
+        // 소수점 나오는거 조절은 toFixed(소수점자리수)로 나타낸다
+
+
+        /*계산하기 버튼 누를때 출력하고싶은 내용
+        견적명 tablename
+        총 비용 parseFloat(total).toFixed(2) 원  월 평균 parseFloat(totalavg).toFixed(2)원
+        할부원금 phone 원   통신요금 총 plancost 원 (월 plancostavg.toFixed(2)원)
+        */
+
+        //계산하기를 누르면 데이터가 누적되게 하고싶음.
+      }
+    </script>
+  </head>
+  
+  <body>
+<h1> 통신비 계산기</h1>
+<p>
+  견적명 <input type="text" id="tablename" size="20" placeholder="견적명 입력">
+</p>
+
+<p>
+  할부원금 <input type="number" id="phone">원<br><br>
+
+  요금제 <input type="number" id="plan" class="cost" value="89000">원
+  (<label><input type="checkbox" name="choice25">
+  선택약정)</label><br><br>
+
+  계약기간
+  <label><input type='radio' name='period' value='24' checked>24개월</label>
+  <label><input type='radio' name='period' value='36'>36개월</label><br><br>
+
+  요금제 필수 기간 : <input type="number" id="planmonth" value="6" class="months">개월<br><br>
+
+  필수기간이후 요금제 : <input type="number" id="afterplan" class="cost">원<br><br>
+  추가 할인
+  <label><input type="radio" name="discount" value="1" checked>없음</label>
+  <label><input type="radio" name="discount" value="0.9">SKT 온가족 10%</label>
+  <label><input type="radio" name="discount" value="0.7">SKT 온가족 30%</label>
+  <br><br>
+</p>
+
+<p>
+  부가서비스<br><br>
+  1. <input type="number" id="bu1" value="0" class="cost">원
+  <input type="number" id="bu1m" value="0" class="months">개월<br><br>
+  2. <input type="number" id="bu2" value="0" class="cost">원
+  <input type="number" id="bu2m" value="0" class="months">개월<br><br>
+</p>
+
+<p>이 계산기는 단순 참고용 입니다.</p><br>
+<button type="button" onclick="calc()">계산하기</button><br><br>
+
+
+
+
+<p id="answer"></p>
+
+  </body>
+</html>
