@@ -128,9 +128,9 @@
   <form name='costcalc'>
     견적명 <input type="text" id="tablename" size="20" placeholder="견적명 입력"><br><br>
 
-    할부원금 <input type="number" id="phone">원<br><br>
+    할부원금 <input type="number" id="phone" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');">원<br><br>
 
-    요금제 <input type="number" id="plan" class="cost" value="89000">원
+    요금제 <input type="number" id="plan" class="cost" value="89000" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');">원
     (<label><input type="checkbox" id="choice25">
     선택약정)</label><br><br>
 
@@ -138,9 +138,9 @@
     <label><input type='radio' name='period' value='24' checked>24개월</label>
     <label><input type='radio' name='period' value='36'>36개월</label><br><br>
 
-    요금제 필수 기간 : <input type="number" id="planmonth" value="6" class="months">개월<br><br>
+    요금제 필수 기간 : <input type="number" id="planmonth" value="6" class="months" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');">개월<br><br>
 
-    필수기간이후 요금제 : <input type="number" id="afterplan" class="cost">원<br><br>
+    필수기간이후 요금제 : <input type="number" id="afterplan" class="cost" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');">원<br><br>
     추가 할인
     <label><input type="radio" name="discount" value="1" checked>없음</label>
     <label><input type="radio" name="discount" value="0.9">SKT 온가족 10%</label>
