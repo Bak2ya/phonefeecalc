@@ -95,8 +95,10 @@
 
           // 소수점 나오는거 조절은 toFixed(소수점자리수)로 나타낸다
 
-          document.getElementById('answer').innerHTML = '견적 : ' + tablename + '<br>'
-          + '총 비용' + parseFloat(total).toFixed(2) + '원' + '(월 평균' + parseFloat(totalavg).toFixed(2) + '원)' + '<br>' + '할부 원금'+ phone +'원, 통신요금 총 '+ plancost +'원. (월'+plancostavg.toFixed(2)+'원)'+'<br>';
+          document.getElementById('answer').innerHTML = '견적 : ' + tablename + '<br><br>'
+          + '총 비용' + parseFloat(total).toFixed(2) + '원' + '(월 평균' + parseFloat(totalavg).toFixed(2) + '원)' + '<br>' 
+          + '할부 원금'+ phone +'원,'+ '<br>'
+          + '통신요금 총 '+ plancost +'원. (월'+plancostavg.toFixed(2)+'원)'+'<br>';
           /*
           document.write('견적 : ' + tablename + '<br>');
           document.write('총 비용' + parseFloat(total).toFixed(2) + '원');
