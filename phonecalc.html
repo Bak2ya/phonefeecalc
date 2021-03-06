@@ -96,9 +96,9 @@
           // 소수점 나오는거 조절은 toFixed(소수점자리수)로 나타낸다
 
           document.getElementById('answer').innerHTML = '견적 : ' + tablename + '<br><br>'
-          + '총 비용' + parseFloat(total).toFixed(2) + '원' + '(월 평균' + parseFloat(totalavg).toFixed(2) + '원)' + '<br>' 
+          + '총 비용' + parseFloat(total).toFixed(1) + '원' + ' (월 평균' + parseFloat(totalavg).toFixed(2) + '원)' + '<br><br>'
           + '할부 원금'+ phone +'원,'+ '<br>'
-          + '통신요금 총 '+ plancost +'원. (월'+plancostavg.toFixed(2)+'원)'+'<br>';
+          + '통신요금 총 '+ plancost.toFixed(1) +'원. (월'+plancostavg.toFixed(2)+'원)'+'<br>';
           /*
           document.write('견적 : ' + tablename + '<br>');
           document.write('총 비용' + parseFloat(total).toFixed(2) + '원');
@@ -123,14 +123,14 @@
   <h1> 통신비 계산기</h1>
   <p>
     이 계산기는 단순 참고용 입니다.<br>
-    할부원금과 사용 요금제를 통해 총 소비 요금과 월 평균 비용을 계산할 수 있습니다.<br>
+    대략적인 총 비용과 월 평균 비용을 계산합니다.<br>
   </p>
   <form name='costcalc'>
     견적명 <input type="text" id="tablename" size="20" placeholder="견적명 입력"><br><br>
 
-    할부원금 <input type="number" id="phone" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');">원<br><br>
+    할부원금 <input type="number" id="phone" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" pattern="\d*">원<br><br>
 
-    요금제 <input type="number" id="plan" class="cost" value="89000" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');">원
+    요금제 <input type="number" id="plan" class="cost" value="89000" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" pattern="\d*">원
     (<label><input type="checkbox" id="choice25">
     선택약정)</label><br><br>
 
@@ -138,9 +138,9 @@
     <label><input type='radio' name='period' value='24' checked>24개월</label>
     <label><input type='radio' name='period' value='36'>36개월</label><br><br>
 
-    요금제 필수 기간 : <input type="number" id="planmonth" value="6" class="months" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');">개월<br><br>
+    요금제 필수 기간 : <input type="number" id="planmonth" value="6" class="months" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" pattern="\d*">개월<br><br>
 
-    필수기간이후 요금제 : <input type="number" id="afterplan" class="cost" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');">원<br><br>
+    필수기간이후 요금제 : <input type="number" id="afterplan" class="cost" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" pattern="\d*">원<br><br>
     추가 할인
     <label><input type="radio" name="discount" value="1" checked>없음</label>
     <label><input type="radio" name="discount" value="0.9">SKT 온가족 10%</label>
@@ -148,12 +148,14 @@
     <br><br>
 
     부가서비스<br><br>
-    1. <input type="number" id="bu1" value="0" class="cost">원
-       <input type="number" id="bu1m" value="0" class="months">개월<br><br>
-    2. <input type="number" id="bu2" value="0" class="cost">원
-       <input type="number" id="bu2m" value="0" class="months">개월<br><br>
+    1. <input type="number" id="bu1" value="0" class="cost" pattern="\d*">원
+       <input type="number" id="bu1m" value="0" class="months" pattern="\d*">개월<br><br>
+    2. <input type="number" id="bu2" value="0" class="cost" pattern="\d*">원
+       <input type="number" id="bu2m" value="0" class="months" pattern="\d*">개월<br><br>
     </form>
 
+    <!--onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" : 숫자만 입력 허용
+    pattern="\d*" : 키패드로 입력-->
     <br>
     <button type="button" onclick="calc()">계산하기</button><br><br>
     <div id="answer"></div>
