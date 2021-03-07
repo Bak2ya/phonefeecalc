@@ -18,26 +18,23 @@
         border-bottom: 1px solid #999; /*테두리 없애고 밑줄만 그리기*/
         outline-style: none; /*클릭했을때 테두리 없애기*/
       }
-      /*id,name에 맞게 입력창 크기 유지*/
+      /*id,name에 맞게 입력창 크기 변경*/
       #phone{width:5em;}
       .months{width:2em;}
       .cost{width:4em;}
     </style>
 
     <script>
-    //필요한거: 모든칸이 입력되지 않고 [계산하기]를 누를경우 모든 창을 채워달라는 alert 메시지 표시
-    // https://runtoyourdream.tistory.com/203
       function calc(){
         //일단 입력받는 값들 다 var로 지정하기
         var tablename =document.getElementById("tablename").value;
         var phone     =document.getElementById("phone").value;
         var plan      =document.getElementById("plan").value;
-        //선약 체크박스 확인하고 true=0.75,  false=1로 하는 수식
         var choice25  =document.getElementById("choice25").checked;
         var choice;
         if(choice25 == true){
           choice = '0.75';
-          }else{choice = '1';}
+          }else{choice = '1';}//선약 체크박스 확인하고 true=0.75, false=1로
         var period    =document.querySelector('input[name="period"]:checked').value;
         //계약기간 24일경우 24, 36인경우 36입력받음.
         //radio 선택에 따라 value값을 받아 period에 저장.
@@ -50,10 +47,10 @@
         var bu2       =document.getElementById("bu2").value;
         var bu2m      =document.getElementById("bu2m").value;
 
-        // 모든 필드 입력여부 확인
+        // 모든 필드 입력여부 확인하는수식 참고: https://runtoyourdream.tistory.com/203
         theForm = document.costcalc;
         if(theForm.tablename.value=="" || theForm.phone.value=="" || theForm.plan.value=="" || theForm.planmonth.value=="" || theForm.afterplan.value=="" || theForm.bu1.value=="" || theForm.bu1m.value=="" || theForm.bu2.value=="" || theForm.bu2m.value==""){
-          if(theForm.tablename.value==""){// 고민: 이렇게 반복되는 내용을 줄일 수 있는 방법은 없을까?
+          if(theForm.tablename.value==""){// TODO: 이렇게 반복되는 내용을 줄일 수 있는 방법은 없을까?
             alert("견적명을 입력해 주세요")
     				theForm.tablename.focus();
           }else if (theForm.phone.value=="") {
@@ -81,37 +78,29 @@
             alert("두 번째 부가서비스 기간을 입력해 주세요")
     				theForm.bu2m.focus();
           }
-        }else {//모든 필드 입력된 경우 계산 실행
-          var plancost  = (parseInt(plan)*parseInt(planmonth) + parseInt(afterplan)*(parseInt(period)-parseInt(planmonth)))*parseFloat(discount)*parseFloat(choice);
+        }else {//모든 필드 입력된 경우 계산 실행. parseInt()는 받은 값을 상수로 바꾸는 식
+          var plancost  = (parseInt(plan)*parseInt(planmonth) + parseInt(afterplan)*(parseInt(period)-parseInt(planmonth))) * parseFloat(discount) * parseFloat(choice);
           //통신요금: (필수요금제*필수기간 + 이후 요금제*잔여기간(계약기간-필수기간))*온가족*선약
-
           var totalbu   = parseInt(bu1) * parseInt(bu1m) + parseInt(bu2) * parseInt(bu2m);
           //부가서비스: (부가요금*부가기간)+(부가요금*부가기간)
-
           var total     = parseInt(phone) + parseFloat(plancost) + parseInt(totalbu);
           var totalavg  = parseFloat(total) / parseInt(period);
           //최종계산: (할부원금 + 통신요금 + 부가서비스)= 총비용. 월비용 : 총비용/계약기간
           var plancostavg = parseFloat(plancost) / parseInt(period);
 
+          // TODO: parseInt() 등을 삭제 가능한가
           // 소수점 나오는거 조절은 toFixed(소수점자리수)로 나타낸다
-
           document.getElementById('answer').innerHTML = '견적 : ' + tablename + '<br><br>'
           + '총 비용' + parseFloat(total).toFixed(1) + '원' + ' (월 평균' + parseFloat(totalavg).toFixed(2) + '원)' + '<br><br>'
           + '할부 원금'+ phone +'원,'+ '<br>'
           + '통신요금 총 '+ plancost.toFixed(1) +'원. (월'+plancostavg.toFixed(2)+'원)'+'<br>';
-          /*
-          document.write('견적 : ' + tablename + '<br>');
-          document.write('총 비용' + parseFloat(total).toFixed(2) + '원');
-          document.write('(월 평균' + parseFloat(totalavg).toFixed(2) + '원)' + '<br>');
-          document.write('할부 원금'+ phone +'원, 통신요금 총 '+ plancost +'원. (월'+plancostavg.toFixed(2)+'원'+'<br>'));
-          이걸로 하면 될줄 알았으나, document.write()는 내용 다 지우고 쓰는거라 쓰면 안된다.*/
+          //document.write()는 이미 화면에 표시된 내용을 다 지우고 쓰는거라 이 상황에서 쓰면 안된다.
+          //document.getElementById('answer').innerHTML = 희망사항 : id가 answer인 element의 내용을 희망사항으로 대체
 
           /*계산하기 버튼 누를때 출력하고싶은 내용
           견적 : tablename
-          총 비용 parseFloat(total).toFixed(2) 원  월 평균 parseFloat(totalavg).toFixed(2)원
-          할부원금 phone 원   통신요금 총 plancost 원 (월 plancostavg.toFixed(2)원)
-          */
-
+          총 비용 total 원 (월 평균 totalavg 원)
+          할부원금 phone 원   통신요금 총 plancost 원 (월 plancostavg 원) */
           // TODO: 계산하기를 누르면 데이터가 누적되게 하고싶음.
         }
       }
@@ -127,35 +116,24 @@
   </p>
   <form name='costcalc'>
     견적명 <input type="text" id="tablename" size="20" placeholder="견적명 입력"><br><br>
-
     할부원금 <input type="number" id="phone" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" pattern="\d*">원<br><br>
-
+    <!--onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" : 숫자만 입력 허용, pattern="\d*" : 키패드로 입력-->
     요금제 <input type="number" id="plan" class="cost" value="89000" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" pattern="\d*">원
     (<label><input type="checkbox" id="choice25">
     선택약정)</label><br><br>
-
-    계약기간
-    <label><input type='radio' name='period' value='24' checked>24개월</label>
-    <label><input type='radio' name='period' value='36'>36개월</label><br><br>
-
+    계약기간<label><input type='radio' name='period' value='24' checked>24개월</label>
+          <label><input type='radio' name='period' value='36'>36개월</label><br><br>
     요금제 필수 기간 : <input type="number" id="planmonth" value="6" class="months" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" pattern="\d*">개월<br><br>
-
     필수기간이후 요금제 : <input type="number" id="afterplan" class="cost" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" pattern="\d*">원<br><br>
     추가 할인
     <label><input type="radio" name="discount" value="1" checked>없음</label>
     <label><input type="radio" name="discount" value="0.9">SKT 온가족 10%</label>
-    <label><input type="radio" name="discount" value="0.7">SKT 온가족 30%</label>
-    <br><br>
-
+    <label><input type="radio" name="discount" value="0.7">SKT 온가족 30%</label><br><br>
     부가서비스<br><br>
-    1. <input type="number" id="bu1" value="0" class="cost" pattern="\d*">원
-       <input type="number" id="bu1m" value="0" class="months" pattern="\d*">개월<br><br>
-    2. <input type="number" id="bu2" value="0" class="cost" pattern="\d*">원
-       <input type="number" id="bu2m" value="0" class="months" pattern="\d*">개월<br><br>
+    1. <input type="number" id="bu1" value="0" class="cost" pattern="\d*">원 <input type="number" id="bu1m" value="0" class="months" pattern="\d*">개월<br><br>
+    2. <input type="number" id="bu2" value="0" class="cost" pattern="\d*">원 <input type="number" id="bu2m" value="0" class="months" pattern="\d*">개월<br><br>
     </form>
 
-    <!--onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" : 숫자만 입력 허용
-    pattern="\d*" : 키패드로 입력-->
     <br>
     <button type="button" onclick="calc()">계산하기</button><br><br>
     <div id="answer"></div>
