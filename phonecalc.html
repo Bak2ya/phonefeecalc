@@ -48,6 +48,8 @@
 
         //추가 : 차비 입력의 필요성을 느끼고 차비, 현재 사용 요금제를 입력받아 금액을 비교해 추가 지출을 자동으로 계산해주는 수식을 추가.
         var minus     =document.getElementById("minus").checked; //차비(마이너스옵션)의 경우 체크
+         if(minus == true){ phone = phone*(-1);
+          }else{phone = phone};//차비 체크박스 확인하고 true=폰값음수로, false=그대로  
         var nowplan   =document.getElementById("nowplan").value; //현재 요금제
         var nowchoice25 =document.getElementById("nowchoice25").checked; //현재 선택약정 여부
         var nowchoice;
@@ -95,9 +97,7 @@
           //통신요금: (필수요금제*필수기간 + 이후 요금제*잔여기간(계약기간-필수기간))*온가족*선약
           var totalbu   = parseInt(bu1) * parseInt(bu1m) + parseInt(bu2) * parseInt(bu2m);
           //부가서비스: (부가요금*부가기간)+(부가요금*부가기간)
-          var total;  
-           if(minus == true){ total = parseFloat(plancost) + parseInt(totalbu) - parseInt(phone);
-          }else{total = parseFloat(plancost) + parseInt(totalbu) + parseInt(phone)};//차비 체크박스 확인하고 true=폰값빼기, false=그대로  
+          var total  = parseFloat(plancost) + parseInt(totalbu) + parseInt(phone); 
           
           var totalavg  = parseFloat(total) / parseInt(period);
           //최종계산: (할부원금 + 통신요금 + 부가서비스)= 총비용. 월비용 : 총비용/계약기간
