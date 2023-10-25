@@ -54,7 +54,7 @@
         if(nowchoice25 == true){ nowchoice = '0.75';
           }else{nowchoice = '1';}//현재선약 체크박스 확인하고 true=0.75, false=1로
         var nowcost = parseInt(nowplan) * parseInt(period) * parseFloat(nowchoice); //현재요금제 기준 계약기간동안 비용
-        var nowdiff = parseFloat(total) - parseFloat(nowcost); // 요금제 차이
+        
 
         // 모든 필드 입력여부 확인하는수식. 참고: https://runtoyourdream.tistory.com/203
         theForm = document.costcalc;
@@ -102,6 +102,8 @@
           var totalavg  = parseFloat(total) / parseInt(period);
           //최종계산: (할부원금 + 통신요금 + 부가서비스)= 총비용. 월비용 : 총비용/계약기간
           var plancostavg = parseFloat(plancost) / parseInt(period);
+
+          var nowdiff = parseFloat(total) - parseFloat(nowcost); // 요금제 차이
 
           // TODO: parseInt() 등을 삭제 가능한가
           // 소수점 나오는거 조절은 toFixed(소수점자리수)로 나타낸다
