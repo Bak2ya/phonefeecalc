@@ -53,7 +53,8 @@
         var nowchoice;
         if(nowchoice25 == true){ nowchoice = '0.75';
           }else{nowchoice = '1';}//현재선약 체크박스 확인하고 true=0.75, false=1로
-        var nowcost  = parseInt(nowplan) * parseInt(period) * parseFloat(nowchoice); //현재요금제 기준 계약기간동안 비용
+        var nowcost = parseInt(nowplan) * parseInt(period) * parseFloat(nowchoice); //현재요금제 기준 계약기간동안 비용
+        var nowdiff = parseFloat(total) - parseFloat(nowcost); // 요금제 차이
 
         // 모든 필드 입력여부 확인하는수식. 참고: https://runtoyourdream.tistory.com/203
         theForm = document.costcalc;
@@ -129,7 +130,7 @@
           document.getElementById('answer').innerHTML = '견적 : ' + tablename + '<br><br>'
           + '총 비용' + parseFloat(total).toFixed(1) + '₩' + ' (월 평균 약' + parseFloat(totalavg).toFixed(2) + '₩)' + '<br><br>'
           + '(할부 원금'+ phone +'₩,'+' 통신요금 총 '+ plancost.toFixed(1) +'₩)' + '<br><br>'
-          + '현재 요금제 (2년간 총'+ nowcost.toFixed(1) + '₩)기준, 추가지출' + @@@@@@@@@@@@@@@@@@@@@@@@@ + '₩' + '<br>';
+          + '현재 요금제 (2년간 총'+ parseFloat(nowcost).toFixed(1) + '₩)기준, 추가지출' + parseFloat(nowdiff).toFixed(1) + '₩' + '<br>';
           
           // TODO: 계산하기를 누르면 데이터가 누적되게 하고싶음.
         }
@@ -146,7 +147,7 @@
     문의 : creative2ya@gmail.com<br>
   </p>
   <form name='costcalc'>
-    견적명 <input type="text" id="tablename" size="20" value="견적1" placeholder="견적명 입력"><br><br>
+    견적명 <input type="text" id="tablename" size="20" value="1번집 견적" placeholder="견적명 입력"><br><br>
     
     현재 요금제 <input type="number" id="nowplan" class="cost" value="69000" onKeyup="this.value=this.value.replace(/[^0-9]/g,'');" pattern="\d*">원
     (<label><input type="checkbox" id="nowchoice25"> 선택약정)</label><br><br>
