@@ -55,7 +55,7 @@
         var nowchoice;
         if(nowchoice25 == true){ nowchoice = '0.75';
           }else{nowchoice = '1';}//현재선약 체크박스 확인하고 true=0.75, false=1로
-        var nowcost = parseInt(nowplan) * parseInt(period) * parseFloat(nowchoice); //현재요금제 기준 계약기간동안 비용
+        var nowcost = parseInt(nowplan) * parseInt(period) * parseFloat(nowchoice) * parseFloat(discount); //현재요금제 기준 계약기간동안 비용
         
 
         // 모든 필드 입력여부 확인하는수식. 참고: https://runtoyourdream.tistory.com/203
