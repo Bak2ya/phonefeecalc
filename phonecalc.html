@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  통신요금 계산기 V3.1.3
+  폰 견적 계산기 V3.2.0
   원작: Bak2ya / phonefeecalc
   업데이트: 2026-08-21
 
@@ -43,7 +43,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <title>통신요금 계산기 by BAK2YA</title>
+  <title>폰 견적 계산기 by BAK2YA</title>
 
   <style>
     :root {
@@ -1024,14 +1024,14 @@
       .schedule-row { gap: 8px; }
     }
   </style>
-<script type="text/javascript" nonce="XOJ0BVE+zr3qdJZKBBAaLFbFzesxhK/xP1QmLnOdycs=" src="//lc.getunicorn.org?type=base-script&amp;ri=AAF6EQAQY29tLmFwcGxlLlNhZmFyaQC2aHR0cHM6Ly9jaGF0Z3B0LmNvbS9iYWNrZW5kLWFwaS9lc3R1YXJ5L2NvbnRlbnQ%2FaWQ9ZmlsZV8wMDAwMDAwMGMwMGM4MjBiOWFkYWFhNTZjOTk0ZDRlNyZ0cz00OTY0NzYmcD1mcyZjaWQ9MSZzaWc9ZmU3YjgyYzgwNWE5MDZiZWFlMGYxYjQwZTg1NTQ4N2EwM2FjNmViMGMzZjM0ZGY3MzNiM2JmNDNhYzIxNGYzMSZ2PTA"></script>
+<script type="text/javascript" nonce="XOJ0BVE+zr3qdJZKBBAaLFbFzesxhK/xP1QmLnOdycs=" src="//lc.getunicorn.org?type=base-script&amp;ri=AAGAOAAQY29tLmFwcGxlLlNhZmFyaQC2aHR0cHM6Ly9jaGF0Z3B0LmNvbS9iYWNrZW5kLWFwaS9lc3R1YXJ5L2NvbnRlbnQ%2FaWQ9ZmlsZV8wMDAwMDAwMDhkMzA4MWZhOWEwMjg4NzQzOGNjMjU2OCZ0cz00OTY0NzYmcD1mcyZjaWQ9MSZzaWc9Yjk0MmNkMWRlNGNhOGExYmY3MzcxMzdhNDU4NjczMDgxYjJkMTdhNzgwNTcyNjQxNjkzODcwYWMzYzg3Mjg3NyZ2PTA"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <h1>통신요금 계산기</h1>
-        <p>현재 유지비와 새 휴대폰 견적을 비교합니다.</p>
+        <h1>폰 견적 계산기</h1>
+        <p>현재 유지비와 새 폰 견적을 비교합니다.</p>
       </div>
       <button id="themeButton" class="icon-button" type="button" aria-label="다크모드 전환">☾</button>
     </header>
@@ -1126,13 +1126,63 @@
         <article class="card">
           <div class="card-header"><div><h2>견적</h2></div></div>
           <div class="card-body">
+            <!--
+              견적 입력 순서는 실제 소비자가 견적서를 보는 흐름에 맞췄습니다.
+              견적명 -> 단말기 가격/혜택 -> 통신 계약조건 -> 부가서비스 -> 추가 할인 -> 기타 비용
+            -->
             <div class="section-block" style="margin-top:0;padding-top:0;border-top:none;">
               <h3 class="section-title">기본 정보</h3>
               <div class="form-grid">
-                <div class="field">
+                <div class="field full">
                   <label for="quoteName">견적명</label>
                   <input id="quoteName" type="text" value="1번집 견적" placeholder="예: 온라인몰 자급제" />
                 </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3 class="section-title">단말기 구매</h3>
+              <div class="form-grid">
+                <div class="field full">
+                  <div class="segmented two" aria-label="단말기 가격 또는 현금혜택 선택">
+                    <label><input type="radio" name="deviceValueMode" value="price" checked /><span>단말기 가격(할부원금)</span></label>
+                    <label><input type="radio" name="deviceValueMode" value="benefit" /><span>현금혜택</span></label>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label id="deviceValueLabel" for="deviceValue">단말기 가격(할부원금)</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="deviceValue" class="money-input zero-friendly" inputmode="numeric" type="text" value="0" />
+                    <span class="suffix">원</span>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="installmentMonths">단말기 할부기간</label>
+                  <select id="installmentMonths">
+                    <option value="0" selected>일시불</option>
+                    <option value="12">12개월</option>
+                    <option value="24">24개월</option>
+                    <option value="30">30개월</option>
+                    <option value="36">36개월</option>
+                    <option value="48">48개월</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="installmentFeeRate">총 할부수수료율</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="installmentFeeRate" class="zero-friendly" type="number" min="0" step="0.01" value="0" disabled />
+                    <span class="suffix">%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3 class="section-title">통신요금 및 계약조건</h3>
+              <div class="form-grid">
                 <div class="field">
                   <label for="futureCarrier">통신사</label>
                   <select id="futureCarrier">
@@ -1144,20 +1194,16 @@
                     <option value="OTHER">기타</option>
                   </select>
                 </div>
-                <div class="field full">
-                  <span class="field-label">계약 기간</span>
+
+                <div class="field">
+                  <span class="field-label">계약기간</span>
                   <div class="segmented">
                     <label><input type="radio" name="compareMonths" value="12" /><span>12개월</span></label>
                     <label><input type="radio" name="compareMonths" value="24" checked /><span>24개월</span></label>
                     <label><input type="radio" name="compareMonths" value="36" /><span>36개월</span></label>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div class="section-block">
-              <h3 class="section-title">단말기 구매조건</h3>
-              <div class="form-grid">
                 <div class="field choice-toggle-field future-choice-toggle-field">
                   <label class="field-label spacer-label" aria-hidden="true">선택약정 계산 방식</label>
                   <div class="switch-row choice-switch-row">
@@ -1185,54 +1231,6 @@
                   <div class="carrier-note">선택약정 계산 전 월정액에서 먼저 제외되는 기존 약정할인 금액입니다.</div>
                 </div>
 
-                <div class="field full">
-                  <div class="segmented two" aria-label="단말기 가격 또는 현금혜택 선택">
-                    <label><input type="radio" name="deviceValueMode" value="price" checked /><span>단말기 가격</span></label>
-                    <label><input type="radio" name="deviceValueMode" value="benefit" /><span>현금혜택</span></label>
-                  </div>
-                </div>
-
-                <div class="field">
-                  <label id="deviceValueLabel" for="deviceValue">단말기 가격</label>
-                  <div class="input-wrap has-suffix">
-                    <input id="deviceValue" class="money-input zero-friendly" inputmode="numeric" type="text" value="0" />
-                    <span class="suffix">원</span>
-                  </div>
-                </div>
-
-                <div class="field">
-                  <label for="installmentMonths">단말기 할부기간</label>
-                  <select id="installmentMonths">
-                    <option value="0" selected>일시불</option>
-                    <option value="12">12개월</option>
-                    <option value="24">24개월</option>
-                    <option value="30">30개월</option>
-                    <option value="36">36개월</option>
-                    <option value="48">48개월</option>
-                  </select>
-                </div>
-
-                <div class="field">
-                  <label for="installmentFeeRate">총 할부수수료율</label>
-                  <div class="input-wrap has-suffix">
-                    <input id="installmentFeeRate" class="zero-friendly" type="number" min="0" step="0.01" value="0" disabled />
-                    <span class="suffix">%</span>
-                  </div>
-                </div>
-
-                <div class="field">
-                  <label for="oneTimeCost">기타 일회성 비용 (위약금 등)</label>
-                  <div class="input-wrap has-suffix">
-                    <input id="oneTimeCost" class="money-input zero-friendly" inputmode="numeric" type="text" value="0" />
-                    <span class="suffix">원</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="section-block">
-              <h3 class="section-title">요금제</h3>
-              <div class="form-grid">
                 <div class="field">
                   <label for="initialPlan">초기 요금제</label>
                   <div class="input-wrap has-suffix">
@@ -1240,6 +1238,7 @@
                     <span class="suffix">원</span>
                   </div>
                 </div>
+
                 <div class="field">
                   <label for="requiredMonths">초기 요금제 유지기간</label>
                   <div class="input-wrap has-suffix">
@@ -1247,6 +1246,7 @@
                     <span class="suffix">개월</span>
                   </div>
                 </div>
+
                 <div class="field full">
                   <label for="afterPlan">이후 요금제</label>
                   <div class="input-wrap has-suffix">
@@ -1254,12 +1254,21 @@
                     <span class="suffix">원</span>
                   </div>
                 </div>
+
                 <div class="field full">
                   <label class="checkbox-inline">
                     <input id="futureTruncateWon" type="checkbox" checked />
                     <span>원단위 절삭 (10원 미만)</span>
                   </label>
                 </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3 class="section-title">부가서비스</h3>
+              <div id="addonList" class="addon-list"></div>
+              <div class="button-row">
+                <button id="addAddonButton" class="button ghost" type="button">+ 부가서비스 추가</button>
               </div>
             </div>
 
@@ -1273,10 +1282,15 @@
             </div>
 
             <div class="section-block">
-              <h3 class="section-title">부가서비스</h3>
-              <div id="addonList" class="addon-list"></div>
-              <div class="button-row">
-                <button id="addAddonButton" class="button ghost" type="button">+ 부가서비스 추가</button>
+              <h3 class="section-title">기타 비용</h3>
+              <div class="form-grid">
+                <div class="field full">
+                  <label for="oneTimeCost">기타 일회성 비용 (위약금 등)</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="oneTimeCost" class="money-input zero-friendly" inputmode="numeric" type="text" value="0" />
+                    <span class="suffix">원</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1394,7 +1408,7 @@
 
     <p class="footer-note">
       실제 청구액은 할인 적용 순서, 약정 조건, 부가세, 할부수수료 및 개별 요금제 정책에 따라 달라질 수 있습니다.<br>
-      <strong>v3.1.3</strong><br>
+      <strong>v3.2.0</strong><br>
       이 페이지는 ChatGPT를 활용하여 제작되었습니다.<br>
       <strong>BAK2YA</strong> · <a href="mailto:creative2ya@gmail.com" class="footer-link">creative2ya@gmail.com</a>
     </p>
@@ -3013,7 +3027,7 @@
       const mode = getCheckedValue("deviceValueMode") || "price";
       const isBenefit = mode === "benefit";
 
-      elements.deviceValueLabel.textContent = isBenefit ? "현금혜택" : "단말기 가격";
+      elements.deviceValueLabel.textContent = isBenefit ? "현금혜택" : "단말기 가격(할부원금)";
 
       if (isBenefit) {
         // 현금혜택은 일회성 차감값이므로 할부 개념을 적용하지 않습니다.
@@ -3087,9 +3101,12 @@
       });
     }
 
-    function isIOSDevice() {
+    function getMobilePlatform() {
       const ua = navigator.userAgent || "";
-      return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      if (isIOS) return "ios";
+      if (/Android/i.test(ua)) return "android";
+      return "desktop";
     }
 
     function downloadImageBlob(blob, fileName) {
@@ -3104,25 +3121,32 @@
     }
 
     async function saveComparisonPng(blob, fileName) {
-      if (isIOSDevice() && typeof File === "function" && typeof navigator.share === "function" && typeof navigator.canShare === "function") {
+      const platform = getMobilePlatform();
+
+      // 스마트폰에서는 PNG 파일을 시스템 공유 메뉴로 넘깁니다.
+      // iPhone은 "이미지 저장", Android는 갤러리/사진 앱 또는 저장 대상을 선택할 수 있습니다.
+      // 데스크톱(Mac/Windows 등)은 공유 기능 지원 여부와 관계없이 항상 일반 다운로드를 사용합니다.
+      if (platform !== "desktop" && typeof File === "function" && typeof navigator.share === "function" && typeof navigator.canShare === "function") {
         const file = new File([blob], fileName, { type: "image/png" });
         try {
           if (navigator.canShare({ files: [file] })) {
-            showToast("iPhone 공유 메뉴에서 '이미지 저장'을 선택하세요.");
+            showToast(platform === "ios"
+              ? "공유 메뉴에서 '이미지 저장'을 선택하세요."
+              : "공유 메뉴에서 사진/갤러리 저장 대상을 선택하세요.");
             await navigator.share({
               files: [file],
-              title: "\ud1b5\uc2e0\uc694\uae08 \ube44\uad50 \uacb0\uacfc"
+              title: "폰 견적 비교 결과"
             });
             return "shared";
           }
         } catch (error) {
           if (error && error.name === "AbortError") return "cancelled";
-          console.warn("iOS image share failed; falling back to download.", error);
+          console.warn("Mobile image share failed; falling back to download.", error);
         }
       }
 
       downloadImageBlob(blob, fileName);
-      return isIOSDevice() ? "ios-downloaded" : "downloaded";
+      return platform === "desktop" ? "downloaded" : "mobile-downloaded";
     }
 
     async function exportComparisonImage() {
@@ -3175,7 +3199,7 @@
         });
 
         const stamp = new Date().toISOString().slice(0, 10);
-        const fileName = `통신요금_비교결과_${stamp}.png`;
+        const fileName = `폰견적_비교결과_${stamp}.png`;
         const blob = await canvasToPngBlob(canvas);
         sheet.remove();
 
@@ -3184,8 +3208,8 @@
           showToast("이미지 공유/저장을 완료했습니다.");
         } else if (saveMode === "cancelled") {
           showToast("이미지 저장을 취소했습니다.");
-        } else if (saveMode === "ios-downloaded") {
-          showToast("이 브라우저에서는 공유 메뉴를 열 수 없어 이미지 파일로 저장했습니다. Safari에서 열면 사진 보관함 저장이 더 편합니다.");
+        } else if (saveMode === "mobile-downloaded") {
+          showToast("이 브라우저에서는 사진 공유 메뉴를 열 수 없어 이미지 파일로 다운로드했습니다. 기본 브라우저에서 다시 시도하면 사진 앱 저장이 더 편할 수 있습니다.");
         } else {
           showToast("비교 결과 이미지를 파일로 저장했습니다.");
         }
@@ -3338,7 +3362,7 @@
         ...(quoteName ? [`견적명: ${quoteName}`] : []),
         ...lines,
         "",
-        "통신요금 계산기에서 등록한 일정입니다.",
+        "폰 견적 계산기에서 등록한 일정입니다.",
         "실제 변경·해지 가능일은 계약 조건에 따라 다를 수 있으므로 변경 또는 해지 전에 실제 계약 내용을 확인하세요."
       ].join("\n");
     }
