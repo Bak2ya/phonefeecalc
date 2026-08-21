@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  통신요금 계산기 V3.1.0
+  통신요금 계산기 V3.1.3
   원작: Bak2ya / phonefeecalc
   업데이트: 2026-08-21
 
@@ -36,6 +36,7 @@
   - 비교 결과에서 선택 견적의 해지일정 등록 화면으로 바로 이동
   - 계약 만료 / 요금제 변경 / 부가서비스 해지 확인용 .ics 일정 생성
   - 일정은 하루 종일이며 7일 전 + 당일 알림 포함
+  - 모바일 할인율/부가서비스/버튼 영역의 좁은 화면 잘림 방지
 -->
 <html lang="ko">
 <head>
@@ -80,7 +81,7 @@
     }
 
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
     body {
       margin: 0;
@@ -325,7 +326,9 @@
       position: relative;
       display: flex;
       align-items: center;
+      min-width: 0;
     }
+    .input-wrap input { min-width: 0; }
 
     .input-wrap.has-suffix input { padding-right: 58px; }
 
@@ -782,6 +785,8 @@
     .result-tools {
       display: flex;
       flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
       gap: 8px;
       padding: 12px 14px;
       border: 1px solid var(--line);
@@ -789,6 +794,7 @@
       background: var(--surface);
       box-shadow: var(--shadow);
     }
+    .result-tools .button { text-align: center; }
     .result-schedule-button {
       border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
       background: var(--accent-soft);
@@ -940,20 +946,85 @@
       .app-shell { width: min(calc(100% - 18px), var(--max-width)); padding-top: 14px; }
       .form-grid { grid-template-columns: 1fr; }
       .field.full { grid-column: auto; }
+
+      /*
+        모바일 할인 행
+        두 칸짜리 레이아웃을 억지로 유지하면 두 자리 할인율과 단위가 겹칠 수 있습니다.
+        좁은 화면에서는 각 입력을 충분한 폭으로 배치하고 삭제 버튼만 작은 고정폭으로 둡니다.
+      */
+      .discount-row { padding: 10px; }
+      .discount-row-grid {
+        grid-template-columns: minmax(0, 1fr) 42px;
+        gap: 8px;
+      }
+      .discount-row-grid .discount-preset-wrap,
+      .discount-row-grid .discount-type,
+      .discount-row-grid .discount-basis { grid-column: 1 / -1; width: 100%; }
+      .discount-row-grid .discount-value-wrap { grid-column: 1; width: 100%; }
+      .discount-row-grid .remove-button {
+        grid-column: 2;
+        justify-self: stretch;
+        width: 42px;
+      }
+      .discount-value-wrap input {
+        padding-right: 42px !important;
+        font-variant-numeric: tabular-nums;
+      }
+      .discount-value-wrap .suffix { right: 12px; }
+      .discount-preset-wrap > select,
+      .discount-preset-wrap > input,
+      .discount-row-grid select { width: 100%; }
+
+      /* 부가서비스도 입력칸이 좁아지지 않도록 금액/기간을 한 줄씩 충분히 확보합니다. */
       .addon-row,
-      .addon-row.with-months { grid-template-columns: 1fr 1fr 42px; }
+      .addon-row.with-months {
+        grid-template-columns: minmax(0, 1fr) 42px;
+        gap: 8px;
+      }
       .addon-row .addon-name,
       .addon-row.with-months .addon-name { grid-column: 1 / -1; }
-      .addon-row.with-months .addon-months { grid-column: 1 / span 2; }
+      .addon-row > .input-wrap:not(.addon-months) { grid-column: 1; grid-row: 2; width: 100%; }
+      .addon-row > .remove-button { grid-column: 2; grid-row: 2; width: 42px; }
+      .addon-row.with-months .addon-months { grid-column: 1; grid-row: 3; width: 100%; }
+      .addon-row .input-wrap.has-suffix input { padding-right: 44px; }
+      .addon-row.with-months .addon-months input { padding-right: 52px; }
+
+      /* 현재 요금제 저장 버튼과 절삭 옵션은 서로 폭을 뺏지 않고 각각 한 줄을 사용합니다. */
+      #saveCurrentButton { flex: 1 1 100%; }
+      #saveCurrentButton + .checkbox-inline {
+        flex: 1 1 100%;
+        justify-content: flex-start;
+      }
+
       .segmented span { font-size: .77rem; }
-      .button-row .button { flex: 1 1 auto; }
+      .button-row .button { flex: 1 1 auto; max-width: 100%; white-space: normal; line-height: 1.3; }
+      .result-tools { justify-content: center; }
+      .result-tools .button {
+        flex: 0 1 360px;
+        width: min(100%, 360px);
+        margin-inline: auto;
+      }
+      .schedule-actions .button { flex: 1 1 100%; }
       .brand p { font-size: .84rem; }
       .current-dual-hero { grid-template-columns: 1fr; }
       .app-tabs { width: 100%; }
-      .app-tab { flex: 1 1 0; }
+      .app-tab { flex: 1 1 0; min-width: 0; padding-inline: 9px; }
       .schedule-grid { grid-template-columns: 1fr; }
     }
+
+    @media (max-width: 420px) {
+      /* 아주 작은 스마트폰에서도 긴 텍스트가 입력칸의 실제 숫자 영역을 침범하지 않게 합니다. */
+      .card-body { padding: 15px; }
+      .segmented span { padding-inline: 5px; font-size: .74rem; }
+      .checkbox-inline { white-space: normal; line-height: 1.35; }
+      .metric { padding-inline: 11px; }
+      .metric .label { overflow-wrap: anywhere; word-break: keep-all; }
+      .breakdown-row { align-items: flex-start; }
+      .breakdown-row strong { max-width: 55%; overflow-wrap: anywhere; }
+      .schedule-row { gap: 8px; }
+    }
   </style>
+<script type="text/javascript" nonce="XOJ0BVE+zr3qdJZKBBAaLFbFzesxhK/xP1QmLnOdycs=" src="//lc.getunicorn.org?type=base-script&amp;ri=AAF6EQAQY29tLmFwcGxlLlNhZmFyaQC2aHR0cHM6Ly9jaGF0Z3B0LmNvbS9iYWNrZW5kLWFwaS9lc3R1YXJ5L2NvbnRlbnQ%2FaWQ9ZmlsZV8wMDAwMDAwMGMwMGM4MjBiOWFkYWFhNTZjOTk0ZDRlNyZ0cz00OTY0NzYmcD1mcyZjaWQ9MSZzaWc9ZmU3YjgyYzgwNWE5MDZiZWFlMGYxYjQwZTg1NTQ4N2EwM2FjNmViMGMzZjM0ZGY3MzNiM2JmNDNhYzIxNGYzMSZ2PTA"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -1323,7 +1394,7 @@
 
     <p class="footer-note">
       실제 청구액은 할인 적용 순서, 약정 조건, 부가세, 할부수수료 및 개별 요금제 정책에 따라 달라질 수 있습니다.<br>
-      <strong>v3.1.1</strong><br>
+      <strong>v3.1.3</strong><br>
       이 페이지는 ChatGPT를 활용하여 제작되었습니다.<br>
       <strong>BAK2YA</strong> · <a href="mailto:creative2ya@gmail.com" class="footer-link">creative2ya@gmail.com</a>
     </p>
@@ -3005,6 +3076,55 @@
       root.querySelectorAll?.("[id]").forEach((node) => node.removeAttribute("id"));
     }
 
+    // iPhone/iPad에서는 PNG 파일을 바로 다운로드하기보다 시스템 공유 메뉴를 열어
+    // 사용자가 "이미지 저장"을 선택해 사진 보관함에 넣을 수 있게 합니다.
+    function canvasToPngBlob(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("PNG blob creation failed"));
+        }, "image/png");
+      });
+    }
+
+    function isIOSDevice() {
+      const ua = navigator.userAgent || "";
+      return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    }
+
+    function downloadImageBlob(blob, fileName) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = fileName;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+
+    async function saveComparisonPng(blob, fileName) {
+      if (isIOSDevice() && typeof File === "function" && typeof navigator.share === "function" && typeof navigator.canShare === "function") {
+        const file = new File([blob], fileName, { type: "image/png" });
+        try {
+          if (navigator.canShare({ files: [file] })) {
+            showToast("iPhone 공유 메뉴에서 '이미지 저장'을 선택하세요.");
+            await navigator.share({
+              files: [file],
+              title: "\ud1b5\uc2e0\uc694\uae08 \ube44\uad50 \uacb0\uacfc"
+            });
+            return "shared";
+          }
+        } catch (error) {
+          if (error && error.name === "AbortError") return "cancelled";
+          console.warn("iOS image share failed; falling back to download.", error);
+        }
+      }
+
+      downloadImageBlob(blob, fileName);
+      return isIOSDevice() ? "ios-downloaded" : "downloaded";
+    }
+
     async function exportComparisonImage() {
       if (!appState.currentSaved || !appState.comparisons.length) return;
 
@@ -3054,15 +3174,21 @@
           scrollY: 0
         });
 
-        const link = document.createElement("a");
         const stamp = new Date().toISOString().slice(0, 10);
-        link.download = `통신요금_비교결과_${stamp}.png`;
-        link.href = canvas.toDataURL("image/png");
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+        const fileName = `통신요금_비교결과_${stamp}.png`;
+        const blob = await canvasToPngBlob(canvas);
         sheet.remove();
-        showToast("비교 결과 이미지를 저장했습니다.");
+
+        const saveMode = await saveComparisonPng(blob, fileName);
+        if (saveMode === "shared") {
+          showToast("이미지 공유/저장을 완료했습니다.");
+        } else if (saveMode === "cancelled") {
+          showToast("이미지 저장을 취소했습니다.");
+        } else if (saveMode === "ios-downloaded") {
+          showToast("이 브라우저에서는 공유 메뉴를 열 수 없어 이미지 파일로 저장했습니다. Safari에서 열면 사진 보관함 저장이 더 편합니다.");
+        } else {
+          showToast("비교 결과 이미지를 파일로 저장했습니다.");
+        }
       } catch (error) {
         console.error(error);
         showToast("이미지 저장에 필요한 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.");
