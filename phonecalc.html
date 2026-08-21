@@ -1,0 +1,3528 @@
+<!DOCTYPE html>
+<!--
+  통신요금 계산기 V3.1.0
+  원작: Bak2ya / phonefeecalc
+  업데이트: 2026-08-21
+
+  ==========================================================================
+  공부용 읽기 순서
+  ==========================================================================
+  1. HTML: '현재 요금제'와 '견적'의 화면 구조
+  2. CSS : 카드 / 입력칸 / 할인행 / 비교카드 디자인
+  3. JavaScript:
+     - readCurrentFormState()       현재 입력값을 객체로 읽기
+     - calculatePlanCharge()        요금제 할인 계산의 핵심
+     - calculateCurrentSummary()    현재 월 유지비 계산
+     - calculateComparison()        미래 견적과 비교 계산
+     - renderComparisons()          여러 견적을 누적 표시
+     - exportComparisonImage()      비교 결과를 PNG로 저장
+
+  이번 버전의 핵심
+  ==========================================================================
+  - 현재 통신사와 구매 후 통신사를 각각 선택해 계산 규칙에 반영
+  - SKT / KT / LG U+ / 알뜰폰·기타별 할인 프리셋 제공
+  - 선택약정은 통신사별 계산 규칙을 사용하고, SKT는 현행/기존 방식 선택 가능
+  - 현재 할인 유지뿐 아니라 구매 견적에 새 할인도 별도로 추가 가능
+  - 직접 입력 할인은 기본요금/선택약정 후/선행할인 후/VAT 제외 기준까지 선택 가능
+  - SKT 자동납부할인은 다른 요금 할인 후 1%, 원 단위 올림, 최대 1,000원으로 자동 계산
+  - 단말기 가격/현금혜택을 하나의 입력칸으로 단순화
+  - 현재 / 미래 각각 원단위 절삭(10원 미만) 기본 적용
+  - 현재 월 유지비 + 기본 24개월 총 소비비용 강조
+  - 비교 결과는 한 개가 아니라 여러 견적을 누적 비교
+  - 각 견적은 X 버튼으로 개별 삭제(확인창 포함)
+  - 모든 비교 결과를 한 장의 PNG로 저장 가능
+  - PNG는 현재 테마와 결과 카드 레이아웃을 유지하고 하단에 주소만 표시
+  - 견적 비교 / 해지일정 등록을 한 HTML 안의 두 화면으로 구성
+  - 비교 결과에서 선택 견적의 해지일정 등록 화면으로 바로 이동
+  - 계약 만료 / 요금제 변경 / 부가서비스 해지 확인용 .ics 일정 생성
+  - 일정은 하루 종일이며 7일 전 + 당일 알림 포함
+-->
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <title>통신요금 계산기 by BAK2YA</title>
+
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --surface-2: #f7f9fc;
+      --surface-3: #eef3fb;
+      --text: #162033;
+      --muted: #6b7b93;
+      --line: #dbe4f1;
+      --accent: #2563eb;
+      --accent-soft: rgba(37, 99, 235, 0.10);
+      --positive: #047857;
+      --negative: #c2410c;
+      --shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --radius-sm: 12px;
+      --max-width: 1320px;
+    }
+
+    body[data-theme="dark"] {
+      --bg: #08111f;
+      --surface: #0f1a2d;
+      --surface-2: #122039;
+      --surface-3: #182744;
+      --text: #e8edf6;
+      --muted: #9dafca;
+      --line: #223552;
+      --accent: #60a5fa;
+      --accent-soft: rgba(96, 165, 250, 0.12);
+      --positive: #34d399;
+      --negative: #fb923c;
+      --shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, rgba(96, 165, 250, 0.08), transparent 28%), var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      line-height: 1.5;
+    }
+
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+
+    /* 숫자 조절 화살표를 제거하여 단위 글자와 겹치지 않게 합니다. */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+    .app-shell {
+      width: min(calc(100% - 28px), var(--max-width));
+      margin: 0 auto;
+      padding: 20px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: clamp(1.55rem, 4vw, 2.15rem);
+      letter-spacing: -0.04em;
+    }
+
+    .brand p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .icon-button {
+      width: 46px;
+      height: 46px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      display: grid;
+      place-items: center;
+      font-size: 1.1rem;
+    }
+
+
+    /* V3: 한 HTML 안에서 견적 비교 / 해지일정 등록 화면을 전환합니다. */
+    .app-tabs {
+      display: flex;
+      gap: 6px;
+      margin: -4px 0 16px;
+      padding: 5px;
+      width: fit-content;
+      max-width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .app-tab {
+      min-height: 38px;
+      padding: 7px 14px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      font-size: .82rem;
+      font-weight: 850;
+    }
+    .app-tab.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .app-view.hidden { display: none !important; }
+
+    .schedule-shell {
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    /* 일정 입력은 긴 폼이 아니므로 넓은 화면을 억지로 채우지 않습니다. */
+    .schedule-top-grid {
+      display: grid;
+      grid-template-columns: minmax(300px, 1fr) 210px;
+      gap: 14px;
+      align-items: start;
+    }
+    .schedule-contract-date-field input[type="date"] {
+      width: 100%;
+      min-height: 48px;
+      font-size: 1rem;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    /* 라벨 / 개월 수 / 계산 날짜 / 등록 버튼의 시작선을 맞춥니다. */
+    .schedule-row {
+      display: grid;
+      grid-template-columns: 158px 96px 128px max-content;
+      gap: 10px;
+      align-items: center;
+      justify-content: start;
+    }
+    .schedule-label {
+      padding-right: 6px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .schedule-row .input-wrap { width: 96px; }
+    .schedule-row .input-wrap input { text-align: right; }
+    .schedule-addon-row .schedule-addon-name { width: 158px; min-width: 0; }
+    .schedule-addon-list { display: grid; gap: 9px; }
+    .schedule-date-preview {
+      width: 128px;
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 9px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .schedule-help {
+      margin-top: 14px;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: .77rem;
+      line-height: 1.55;
+    }
+    .schedule-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .difference-highlight {
+      padding: 15px 16px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .difference-highlight .label {
+      color: var(--muted);
+      font-size: .74rem;
+      font-weight: 800;
+    }
+    .difference-highlight .amount {
+      margin-top: 4px;
+      font-size: 1.35rem;
+      font-weight: 900;
+      letter-spacing: -.035em;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.18fr) minmax(380px, 0.82fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .stack { display: grid; gap: 14px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 18px 18px 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .card-header h2,
+    .card-header h3 {
+      margin: 0;
+      font-size: 1.06rem;
+      letter-spacing: -0.02em;
+    }
+
+    .card-body { padding: 18px; }
+
+    .section-block + .section-block {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .section-title {
+      margin: 0 0 12px;
+      font-size: 0.84rem;
+      font-weight: 800;
+      color: var(--muted);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .field { min-width: 0; }
+    .field.full { grid-column: 1 / -1; }
+
+    .field label,
+    .field-label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: var(--muted);
+    }
+
+    .input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-wrap.has-suffix input { padding-right: 58px; }
+
+    .suffix {
+      position: absolute;
+      right: 13px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select {
+      width: 100%;
+      min-height: 46px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position:
+        calc(100% - 18px) calc(50% - 2px),
+        calc(100% - 12px) calc(50% - 2px);
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+      padding-right: 34px;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+    }
+
+    input:disabled,
+    select:disabled { opacity: 0.58; cursor: not-allowed; }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--surface-2);
+    }
+    .segmented.two { grid-template-columns: repeat(2, 1fr); }
+
+    .segmented label { margin: 0; position: relative; }
+    .segmented input { position: absolute; opacity: 0; pointer-events: none; }
+    .segmented span {
+      display: block;
+      text-align: center;
+      padding: 9px 8px;
+      border-radius: 9px;
+      font-size: 0.84rem;
+      font-weight: 800;
+      color: var(--muted);
+      user-select: none;
+      cursor: pointer;
+    }
+    .segmented input:checked + span {
+      background: var(--surface);
+      color: var(--accent);
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+    }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 46px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+    }
+
+    .switch-copy strong { display: block; font-size: 0.88rem; }
+
+    /* 선택약정 토글은 의미가 명확하므로 설명문을 줄이고 폭도 작게 사용합니다. */
+    .choice-toggle-field { justify-self: start; width: min(100%, 170px); }
+    .choice-switch-row { width: 100%; min-height: 46px; padding-inline: 12px; }
+    .spacer-label { visibility: hidden; }
+    .future-choice-toggle-field { align-self: start; }
+    .choice-discount-preview {
+      margin-top: 6px;
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 850;
+    }
+    .switch-copy small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.75rem; }
+
+    .switch { position: relative; width: 46px; height: 26px; flex: 0 0 auto; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; inset: 0; border-radius: 999px; background: #cbd5e1; transition: 0.18s ease; }
+    .slider::before {
+      content: "";
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      left: 3px;
+      top: 3px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+      transition: .18s ease;
+    }
+    .switch input:checked + .slider { background: var(--accent); }
+    .switch input:checked + .slider::before { transform: translateX(20px); }
+
+    .checkbox-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+    .checkbox-inline input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+
+    .hidden { display: none !important; }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      align-items: center;
+    }
+
+    .button {
+      min-height: 42px;
+      padding: 9px 14px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.84rem;
+      font-weight: 800;
+    }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: white; }
+    .button.ghost { background: var(--surface-2); }
+    .button.danger { color: var(--negative); }
+    .button:disabled { opacity: .5; cursor: not-allowed; }
+
+    .micro-note { margin-top: 8px; color: var(--muted); font-size: 0.75rem; }
+    .notice-inline {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    /* ======================================================================
+       할인 목록
+       한 행이 하나의 할인 규칙입니다.
+       ====================================================================== */
+    .discount-list { display: grid; gap: 10px; }
+
+    .discount-row {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface-2);
+    }
+
+    .discount-row-grid {
+      display: grid;
+      grid-template-columns: minmax(170px, 1.3fr) minmax(112px, .8fr) minmax(105px, .72fr) minmax(175px, 1.15fr) 38px;
+      gap: 8px;
+      align-items: center;
+    }
+    .discount-row-grid > * { min-width: 0; }
+    .discount-row-grid select,
+    .discount-row-grid input { min-width: 0; }
+
+    .discount-advanced {
+      display: grid;
+      grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr);
+      gap: 8px;
+      margin-top: 9px;
+      padding-top: 9px;
+      border-top: 1px dashed var(--line);
+    }
+
+    .discount-advanced .input-wrap { min-width: 0; }
+
+    .carrier-note {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: .75rem;
+      font-weight: 700;
+    }
+
+    .discount-preset-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .discount-preset-wrap > select,
+    .discount-preset-wrap > input {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .preset-return-button {
+      flex: 0 0 auto;
+      min-height: 42px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 800;
+    }
+
+    .discount-carry {
+      margin-top: 9px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 700;
+    }
+    .discount-carry input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+    .discount-live-preview {
+      margin-top: 7px;
+      color: var(--accent);
+      font-size: .76rem;
+      font-weight: 800;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+      word-break: keep-all;
+    }
+
+    .remove-button {
+      width: 38px;
+      height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    /* 부가서비스 */
+    .addon-list { display: grid; gap: 9px; }
+    .addon-row {
+      display: grid;
+      grid-template-columns: minmax(110px, 1.4fr) minmax(100px, 1fr) 42px;
+      gap: 8px;
+      align-items: center;
+    }
+    .addon-row.with-months { grid-template-columns: minmax(110px, 1.35fr) minmax(100px, 1fr) 82px 42px; }
+
+    /* 오른쪽 결과 영역 */
+    .summary-panel {
+      display: grid;
+      gap: 14px;
+      position: sticky;
+      top: 16px;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+
+    .placeholder {
+      padding: 30px 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .result-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .result-card-header strong { font-size: .94rem; letter-spacing: -.02em; }
+    .close-result {
+      position: relative;
+      z-index: 2;
+      flex: 0 0 auto;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-weight: 900;
+    }
+
+    .result-hero {
+      padding: 18px 16px 15px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, var(--accent-soft), transparent 72%);
+    }
+    .result-hero .label { color: var(--muted); font-size: .76rem; font-weight: 800; }
+    .result-hero .amount {
+      margin-top: 3px;
+      font-size: clamp(1.7rem, 4vw, 2.35rem);
+      line-height: 1.14;
+      font-weight: 900;
+      letter-spacing: -.045em;
+    }
+    .result-hero .sub { margin-top: 5px; color: var(--muted); font-size: .81rem; }
+
+    .current-dual-hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .current-highlight {
+      background: var(--surface);
+      padding: 17px 16px;
+    }
+    .current-highlight.primary { background: linear-gradient(135deg, var(--accent-soft), var(--surface)); }
+    .current-highlight .label { color: var(--muted); font-size: .74rem; font-weight: 800; }
+    .current-highlight .amount { margin-top: 4px; font-size: 1.35rem; font-weight: 900; letter-spacing: -.035em; }
+
+    .comparison-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 9px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      font-size: .76rem;
+      font-weight: 800;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1px;
+      background: var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .metric { background: var(--surface); padding: 12px 14px; }
+    .metric .label { color: var(--muted); font-size: .72rem; font-weight: 700; }
+    .metric .value { margin-top: 4px; font-size: .96rem; font-weight: 900; }
+
+    .breakdown { padding: 12px 16px 15px; }
+    .breakdown-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 0;
+      font-size: .82rem;
+    }
+    .breakdown-row span:first-child { color: var(--muted); }
+    .breakdown-row strong { text-align: right; }
+
+    .discount-summary-list {
+      display: grid;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .discount-summary-item {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 7px 9px;
+      border-radius: 9px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: .74rem;
+    }
+    .discount-summary-item strong {
+      flex: 0 0 auto;
+      color: var(--text);
+      font-size: .76rem;
+    }
+
+    .discount-summary-note {
+      flex: 1 0 100%;
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.45;
+      margin-top: 2px;
+      overflow-wrap: anywhere;
+    }
+
+    .summary-detail-toggle-wrap {
+      padding: 10px 14px 13px;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .summary-detail-toggle {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 0.79rem;
+      font-weight: 800;
+    }
+    .summary-detail-toggle:hover {
+      color: var(--text);
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    }
+    .summary-detail-content.hidden { display: none !important; }
+
+    .status-list { display: grid; gap: 7px; margin: 0 16px 14px; }
+    .status-item { padding: 8px 10px; border-radius: 10px; background: var(--surface-2); color: var(--muted); font-size: .75rem; }
+
+    details { border-top: 1px solid var(--line); }
+    summary { padding: 12px 16px; cursor: pointer; font-size: .82rem; font-weight: 800; user-select: none; }
+    .month-table-wrap { max-height: 300px; overflow: auto; border-top: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; font-size: .74rem; }
+    th, td { padding: 8px 9px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); color: var(--muted); font-weight: 800; }
+
+    .result-tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .result-schedule-button {
+      border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 850;
+    }
+
+    .dirty-note {
+      display: none;
+      margin-top: 12px;
+      padding: 9px 10px;
+      border-radius: 10px;
+      background: var(--accent-soft);
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 700;
+    }
+    .dirty-note.show { display: block; }
+
+    /* 비교 버튼을 사용할 수 없는 이유를 같은 형식의 빨간 안내문으로 표시합니다. */
+    .compare-validation {
+      display: grid;
+      gap: 5px;
+      margin-top: 9px;
+    }
+    .compare-validation:empty { display: none; }
+    .validation-message {
+      color: var(--negative);
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    .positive { color: var(--positive) !important; }
+    .negative { color: var(--negative) !important; }
+
+    .footer-note {
+      max-width: 860px;
+      margin: 18px auto 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: .75rem;
+    }
+    .footer-link {
+      color: inherit;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .footer-link:hover { text-decoration: underline; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      z-index: 50;
+      transform: translate(-50%, 20px);
+      padding: 10px 14px;
+      border-radius: 11px;
+      background: #111827;
+      color: white;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transition: .2s ease;
+      font-size: .82rem;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    /*
+      이미지 저장용 영역
+      ----------------------------------------------------------------------
+      결과 화면의 카드를 새로 디자인하지 않고 실제 결과 카드를 복제해서 저장합니다.
+      폭만 스마트폰에서 보기 좋은 480px로 제한하며, body의 CSS 변수를 그대로
+      상속하므로 현재 라이트/다크 모드와 강조색이 이미지에도 그대로 반영됩니다.
+    */
+    .export-sheet {
+      position: fixed;
+      left: -10000px;
+      top: 0;
+      width: 480px;
+      padding: 14px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      z-index: -1;
+    }
+    .export-sheet .card {
+      width: 100%;
+      margin: 0 0 12px;
+    }
+    .export-sheet .stack { gap: 12px; }
+    .export-sheet .result-tools { display: none !important; }
+    .export-sheet .export-address {
+      margin-top: 4px;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+      word-break: break-all;
+    }
+    .export-sheet .export-address strong {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    @media (max-width: 1400px) {
+      .discount-row-grid {
+        grid-template-columns: minmax(170px, 1.25fr) minmax(120px, 0.85fr) minmax(110px, 0.75fr);
+      }
+      .discount-row-grid .discount-preset-wrap { grid-column: 1 / span 2; }
+      .discount-row-grid .discount-type { grid-column: 3; }
+      .discount-row-grid .discount-value-wrap { grid-column: 1; }
+      .discount-row-grid .discount-basis { grid-column: 2 / span 1; }
+      .discount-row-grid .remove-button { grid-column: 3; justify-self: end; }
+    }
+
+    @media (max-width: 980px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .summary-panel { position: static; max-height: none; overflow: visible; }
+    }
+
+    @media (max-width: 760px) {
+      .discount-row-grid { grid-template-columns: 1fr 1fr; }
+      .discount-row-grid .discount-preset-wrap { grid-column: 1 / -1; }
+      .discount-row-grid .discount-basis { grid-column: 1 / -1; }
+      .discount-row-grid .remove-button { justify-self: end; }
+      .discount-advanced { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      .schedule-shell { max-width: none; }
+      .schedule-top-grid { grid-template-columns: 1fr; }
+      .schedule-contract-date-field { max-width: 280px; }
+      .schedule-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); justify-content: stretch; }
+      .schedule-row .schedule-name { grid-column: 1 / -1; width: 100%; }
+      .schedule-row .schedule-label { text-align: left; padding-right: 0; }
+      .schedule-row .input-wrap { grid-column: 1; width: 100%; }
+      .schedule-row .schedule-date-preview { grid-column: 2; width: 100%; }
+      .schedule-row .schedule-register-button { grid-column: 1 / -1; width: 100%; }
+      .schedule-addon-row .schedule-addon-name { width: 100%; }
+      .schedule-addon-actions { grid-column: 1 / -1; justify-content: flex-start !important; }
+    }
+
+    @media (max-width: 620px) {
+      .app-shell { width: min(calc(100% - 18px), var(--max-width)); padding-top: 14px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .field.full { grid-column: auto; }
+      .addon-row,
+      .addon-row.with-months { grid-template-columns: 1fr 1fr 42px; }
+      .addon-row .addon-name,
+      .addon-row.with-months .addon-name { grid-column: 1 / -1; }
+      .addon-row.with-months .addon-months { grid-column: 1 / span 2; }
+      .segmented span { font-size: .77rem; }
+      .button-row .button { flex: 1 1 auto; }
+      .brand p { font-size: .84rem; }
+      .current-dual-hero { grid-template-columns: 1fr; }
+      .app-tabs { width: 100%; }
+      .app-tab { flex: 1 1 0; }
+      .schedule-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <h1>통신요금 계산기</h1>
+        <p>현재 유지비와 새 휴대폰 견적을 비교합니다.</p>
+      </div>
+      <button id="themeButton" class="icon-button" type="button" aria-label="다크모드 전환">☾</button>
+    </header>
+
+    <nav class="app-tabs" aria-label="주요 기능">
+      <button id="compareTabButton" class="app-tab active" type="button" data-view="compare">견적 비교</button>
+      <button id="scheduleTabButton" class="app-tab" type="button" data-view="schedule">해지일정 등록</button>
+    </nav>
+
+    <main id="compareView" class="main-grid app-view">
+      <section class="stack" aria-label="입력 영역">
+        <!-- ============================ 현재 요금제 ========================== -->
+        <article class="card">
+          <div class="card-header"><div><h2>현재 요금제</h2></div></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="field">
+                <label for="currentCarrier">통신사</label>
+                <select id="currentCarrier" class="current-source">
+                  <option value="SKT" selected>SKT</option>
+                  <option value="KT">KT</option>
+                  <option value="LGU">LG U+</option>
+                  <option value="MVNO">알뜰폰</option>
+                  <option value="OTHER">기타</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="currentPlan">현재 요금제</label>
+                <div class="input-wrap has-suffix">
+                  <input id="currentPlan" class="money-input current-source" inputmode="numeric" type="text" value="69,000" />
+                  <span class="suffix">원</span>
+                </div>
+              </div>
+
+              <div class="field choice-toggle-field">
+                <label>&nbsp;</label>
+                <div class="switch-row choice-switch-row">
+                  <div class="switch-copy"><strong>선택약정</strong></div>
+                  <label class="switch">
+                    <input id="currentChoiceEnabled" class="current-source" type="checkbox" checked />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="field" id="currentChoiceRuleField">
+                <label for="currentChoiceRule">선택약정 계산 방식</label>
+                <select id="currentChoiceRule" class="current-source"></select>
+                <div id="currentChoiceRuleNote" class="carrier-note"></div>
+                <div id="currentChoiceDiscountPreview" class="choice-discount-preview"></div>
+              </div>
+
+              <div class="field full hidden" id="currentChoiceBaseAdjustmentField">
+                <label for="currentChoiceBaseAdjustment">기존 요금약정 할인액</label>
+                <div class="input-wrap has-suffix">
+                  <input id="currentChoiceBaseAdjustment" class="money-input current-source" inputmode="numeric" type="text" value="0" />
+                  <span class="suffix">원</span>
+                </div>
+                <div class="carrier-note">선택약정 25%를 계산하기 전에 월정액에서 먼저 제외할 금액입니다.</div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3 class="section-title">할인</h3>
+              <div id="currentDiscountList" class="discount-list"></div>
+              <div class="button-row">
+                <button id="addCurrentDiscountButton" class="button ghost" type="button">+ 할인 추가</button>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3 class="section-title">부가서비스</h3>
+              <div id="currentAddonList" class="addon-list"></div>
+              <div class="button-row">
+                <button id="addCurrentAddonButton" class="button ghost" type="button">+ 부가서비스 추가</button>
+              </div>
+            </div>
+
+            <div class="button-row">
+              <button id="saveCurrentButton" class="button primary" type="button">현재 요금제 저장</button>
+              <label class="checkbox-inline">
+                <input id="currentTruncateWon" class="current-source" type="checkbox" checked />
+                <span>원단위 절삭 (10원 미만)</span>
+              </label>
+            </div>
+            <div id="currentDirtyNote" class="dirty-note">현재 요금제가 변경되었습니다. 비교 전에 다시 저장해 주세요.</div>
+          </div>
+        </article>
+
+        <!-- ========================= 구매 견적 ======================== -->
+        <article class="card">
+          <div class="card-header"><div><h2>견적</h2></div></div>
+          <div class="card-body">
+            <div class="section-block" style="margin-top:0;padding-top:0;border-top:none;">
+              <h3 class="section-title">기본 정보</h3>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="quoteName">견적명</label>
+                  <input id="quoteName" type="text" value="1번집 견적" placeholder="예: 온라인몰 자급제" />
+                </div>
+                <div class="field">
+                  <label for="futureCarrier">통신사</label>
+                  <select id="futureCarrier">
+                    <option value="SAME" selected>현재 통신사와 동일</option>
+                    <option value="SKT">SKT</option>
+                    <option value="KT">KT</option>
+                    <option value="LGU">LG U+</option>
+                    <option value="MVNO">알뜰폰</option>
+                    <option value="OTHER">기타</option>
+                  </select>
+                </div>
+                <div class="field full">
+                  <span class="field-label">계약 기간</span>
+                  <div class="segmented">
+                    <label><input type="radio" name="compareMonths" value="12" /><span>12개월</span></label>
+                    <label><input type="radio" name="compareMonths" value="24" checked /><span>24개월</span></label>
+                    <label><input type="radio" name="compareMonths" value="36" /><span>36개월</span></label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3 class="section-title">단말기 구매조건</h3>
+              <div class="form-grid">
+                <div class="field choice-toggle-field future-choice-toggle-field">
+                  <label class="field-label spacer-label" aria-hidden="true">선택약정 계산 방식</label>
+                  <div class="switch-row choice-switch-row">
+                    <div class="switch-copy"><strong>선택약정</strong></div>
+                    <label class="switch">
+                      <input id="futureChoiceEnabled" type="checkbox" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="field" id="futureChoiceRuleField">
+                  <label for="futureChoiceRule">선택약정 계산 방식</label>
+                  <select id="futureChoiceRule"></select>
+                  <div id="futureChoiceRuleNote" class="carrier-note"></div>
+                  <div id="futureChoiceDiscountPreview" class="choice-discount-preview"></div>
+                </div>
+
+                <div class="field full hidden" id="futureChoiceBaseAdjustmentField">
+                  <label for="futureChoiceBaseAdjustment">기존 요금약정 할인액</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="futureChoiceBaseAdjustment" class="money-input" inputmode="numeric" type="text" value="0" />
+                    <span class="suffix">원</span>
+                  </div>
+                  <div class="carrier-note">선택약정 계산 전 월정액에서 먼저 제외되는 기존 약정할인 금액입니다.</div>
+                </div>
+
+                <div class="field full">
+                  <div class="segmented two" aria-label="단말기 가격 또는 현금혜택 선택">
+                    <label><input type="radio" name="deviceValueMode" value="price" checked /><span>단말기 가격</span></label>
+                    <label><input type="radio" name="deviceValueMode" value="benefit" /><span>현금혜택</span></label>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label id="deviceValueLabel" for="deviceValue">단말기 가격</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="deviceValue" class="money-input zero-friendly" inputmode="numeric" type="text" value="0" />
+                    <span class="suffix">원</span>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="installmentMonths">단말기 할부기간</label>
+                  <select id="installmentMonths">
+                    <option value="0" selected>일시불</option>
+                    <option value="12">12개월</option>
+                    <option value="24">24개월</option>
+                    <option value="30">30개월</option>
+                    <option value="36">36개월</option>
+                    <option value="48">48개월</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="installmentFeeRate">총 할부수수료율</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="installmentFeeRate" class="zero-friendly" type="number" min="0" step="0.01" value="0" disabled />
+                    <span class="suffix">%</span>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="oneTimeCost">기타 일회성 비용 (위약금 등)</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="oneTimeCost" class="money-input zero-friendly" inputmode="numeric" type="text" value="0" />
+                    <span class="suffix">원</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3 class="section-title">요금제</h3>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="initialPlan">초기 요금제</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="initialPlan" class="money-input" inputmode="numeric" type="text" value="105,000" />
+                    <span class="suffix">원</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="requiredMonths">초기 요금제 유지기간</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="requiredMonths" type="number" min="0" step="1" value="6" />
+                    <span class="suffix">개월</span>
+                  </div>
+                </div>
+                <div class="field full">
+                  <label for="afterPlan">이후 요금제</label>
+                  <div class="input-wrap has-suffix">
+                    <input id="afterPlan" class="money-input" inputmode="numeric" type="text" value="69,000" />
+                    <span class="suffix">원</span>
+                  </div>
+                </div>
+                <div class="field full">
+                  <label class="checkbox-inline">
+                    <input id="futureTruncateWon" type="checkbox" checked />
+                    <span>원단위 절삭 (10원 미만)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3 class="section-title">할인</h3>
+              <div id="futureDiscountPreview" class="notice-inline">현재에서 이어지는 할인이 있으면 이곳에 표시됩니다.</div>
+              <div id="futureDiscountList" class="discount-list" style="margin-top:10px"></div>
+              <div class="button-row">
+                <button id="addFutureDiscountButton" class="button ghost" type="button">+ 할인 추가</button>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3 class="section-title">부가서비스</h3>
+              <div id="addonList" class="addon-list"></div>
+              <div class="button-row">
+                <button id="addAddonButton" class="button ghost" type="button">+ 부가서비스 추가</button>
+              </div>
+            </div>
+
+            <div class="button-row">
+              <button id="compareButton" class="button primary" type="button">이 견적 비교</button>
+              <button id="resetButton" class="button ghost" type="button">입력 초기화</button>
+            </div>
+            <div id="compareValidation" class="compare-validation" aria-live="polite"></div>
+          </div>
+        </article>
+      </section>
+
+      <!-- ============================ 결과 영역 =========================== -->
+      <aside class="summary-panel" aria-label="비교 결과">
+        <article id="resultPlaceholder" class="card">
+          <div class="placeholder">현재 요금제를 먼저 저장해 주세요.</div>
+        </article>
+
+        <article id="currentSummaryCard" class="card hidden">
+          <div class="result-card-header"><strong>현재 요금제</strong></div>
+          <div class="current-dual-hero">
+            <div class="current-highlight primary">
+              <div class="label">현재 월 유지비</div>
+              <div id="currentSavedMonthly" class="amount">0원</div>
+            </div>
+            <div class="current-highlight">
+              <div class="label">24개월 총 소비비용</div>
+              <div id="currentSaved24Total" class="amount">0원</div>
+            </div>
+          </div>
+          <div class="summary-detail-toggle-wrap">
+            <button id="currentDetailToggle" class="summary-detail-toggle" type="button" data-detail-target="currentDetailContent">세부사항 확인</button>
+          </div>
+          <div id="currentDetailContent" class="summary-detail-content hidden">
+            <div class="breakdown">
+              <div class="breakdown-row"><span>통신사</span><strong id="currentSavedCarrier">SKT</strong></div>
+              <div class="breakdown-row"><span>선택약정</span><strong id="currentSavedChoice">적용</strong></div>
+              <div class="breakdown-row"><span>할인 합계</span><strong id="currentSavedExtraSaving">0원</strong></div>
+              <div class="breakdown-row"><span>부가서비스 월합계</span><strong id="currentSavedAddonMonthly">0원</strong></div>
+              <div class="breakdown-row"><span>원단위 절삭</span><strong id="currentSavedTruncate">미적용</strong></div>
+              <div id="currentDiscountSummary" class="discount-summary-list"></div>
+            </div>
+          </div>
+        </article>
+
+        <div id="comparisonList" class="stack"></div>
+
+        <div id="resultTools" class="result-tools hidden">
+          <button id="exportImageButton" class="button primary" type="button">비교 결과 이미지 저장</button>
+          <button id="scheduleFromResultButton" class="button result-schedule-button" type="button">이 계약대로 해지일정 등록</button>
+        </div>
+      </aside>
+    </main>
+
+    <section id="scheduleView" class="app-view schedule-shell hidden" aria-label="해지일정 등록">
+      <article class="card">
+        <div class="card-header"><div><h2>해지일정 등록</h2></div></div>
+        <div class="card-body">
+          <div class="schedule-top-grid">
+            <div class="field">
+              <label for="scheduleQuoteSource">견적 불러오기</label>
+              <select id="scheduleQuoteSource">
+                <option value="DIRECT" selected>직접 입력</option>
+              </select>
+              <div class="micro-note">비교한 견적을 선택하면 계약기간, 요금제 유지기간, 부가서비스를 자동으로 불러옵니다.</div>
+            </div>
+            <div class="field schedule-contract-date-field">
+              <label for="scheduleContractDate">계약일</label>
+              <input id="scheduleContractDate" type="date" />
+            </div>
+          </div>
+
+          <div class="section-block">
+            <h3 class="section-title">주요 일정</h3>
+            <div class="schedule-row">
+              <div class="schedule-name schedule-label"><strong>계약기간</strong></div>
+              <div class="input-wrap has-suffix">
+                <input id="scheduleContractMonths" class="zero-friendly" type="number" min="0" step="1" value="24" />
+                <span class="suffix">개월</span>
+              </div>
+              <div id="contractEndPreview" class="schedule-date-preview">-</div>
+              <button id="registerContractEndButton" class="button schedule-register-button" type="button">계약만료일 등록</button>
+            </div>
+            <div class="schedule-row" style="margin-top:8px;">
+              <div class="schedule-name schedule-label"><strong>요금제 유지기간</strong></div>
+              <div class="input-wrap has-suffix">
+                <input id="schedulePlanMonths" class="zero-friendly" type="number" min="0" step="1" value="6" />
+                <span class="suffix">개월</span>
+              </div>
+              <div id="planChangePreview" class="schedule-date-preview">-</div>
+              <button id="registerPlanChangeButton" class="button schedule-register-button" type="button">요금제 변경일 등록</button>
+            </div>
+          </div>
+
+          <div class="section-block">
+            <h3 class="section-title">부가서비스</h3>
+            <div id="scheduleAddonList" class="schedule-addon-list"></div>
+            <div class="button-row">
+              <button id="addScheduleAddonButton" class="button ghost" type="button">+ 부가서비스 추가</button>
+            </div>
+          </div>
+
+          <div class="schedule-actions">
+            <button id="registerAllScheduleButton" class="button primary" type="button">전체 일정 파일 만들기</button>
+          </div>
+
+          <div class="schedule-help">
+            스마트폰 캘린더에 계약 만료일, 요금제 변경일, 부가서비스 해지일을 등록할 수 있습니다.
+            일정은 <strong>하루 종일</strong> 일정으로 생성되며 <strong>7일 전과 당일</strong> 알림을 포함합니다.
+            계산된 날짜는 입력한 계약일과 유지기간을 기준으로 한 예상일이므로, 실제 변경·해지 전에는 반드시 실제 계약 내용을 확인하세요.
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <p class="footer-note">
+      실제 청구액은 할인 적용 순서, 약정 조건, 부가세, 할부수수료 및 개별 요금제 정책에 따라 달라질 수 있습니다.<br>
+      <strong>v3.1.1</strong><br>
+      이 페이지는 ChatGPT를 활용하여 제작되었습니다.<br>
+      <strong>BAK2YA</strong> · <a href="mailto:creative2ya@gmail.com" class="footer-link">creative2ya@gmail.com</a>
+    </p>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="exportHost"></div>
+
+  <script>
+    "use strict";
+
+    /* ======================================================================
+       [JavaScript 1] 상수와 앱 상태
+       ====================================================================== */
+    const $ = (id) => document.getElementById(id);
+    const CHOICE_DISCOUNT_RATE = 25;
+    const CANONICAL_PAGE_URL = "https://bak2ya.github.io/phonefeecalc/phonecalc.html";
+    const THEME_KEY = "phoneFeeCalcV2Theme";
+
+    const CARRIER_LABELS = {
+      SKT: "SKT",
+      KT: "KT",
+      LGU: "LG U+",
+      MVNO: "알뜰폰",
+      OTHER: "기타"
+    };
+
+    // 통신사별로 화면에 보여줄 대표 할인 프리셋입니다.
+    // 가입 가능 여부와 실제 할인액은 개인 조건에 따라 다를 수 있으므로,
+    // 프리셋은 '계산 방식'을 빠르게 선택하기 위한 도구로 사용합니다.
+    const CARRIER_PRESET_OPTIONS = {
+      SKT: [
+        ["skt_family", "SKT 온가족할인"],
+        ["skt_autopay", "SKT 자동납부할인"],
+        ["skt_family_bundle_fixed", "SKT 가족결합 할인 (금액 입력)"]
+      ],
+      KT: [
+        ["kt_premium_family", "KT 프리미엄 가족결합 (25%)"],
+        ["kt_premium_single", "KT 프리미엄 싱글결합 (25%)"],
+        ["kt_total_bundle", "KT 총액결합할인 (금액 입력)"],
+        ["kt_fixed_bundle", "KT 정액결합할인 (금액 입력)"]
+      ],
+      LGU: [
+        ["lgu_easy_family", "LG U+ 참 쉬운 가족결합 (금액 입력)"],
+        ["lgu_family_love", "LG U+ 가족무한사랑 (금액 입력)"],
+        ["lgu_bundle_percent", "LG U+ 결합 정률할인"],
+        ["lgu_bundle_fixed", "LG U+ 기타 결합 정액할인"]
+      ],
+      MVNO: [],
+      OTHER: []
+    };
+
+    const COMMON_PRESET_OPTIONS = [
+      ["generic_base_percent", "기본요금 정률할인"],
+      ["generic_after_choice_percent", "선택약정 후 정률할인"],
+      ["generic_after_all_percent", "모든 선행할인 후 정률할인"],
+      ["generic_fixed", "월 정액할인"],
+      ["custom", "직접 입력"]
+    ];
+
+    const appState = {
+      currentSaved: null,
+      currentDirty: false,
+      comparisons: []
+    };
+
+    const elements = {
+      themeButton: $("themeButton"),
+      compareTabButton: $("compareTabButton"),
+      scheduleTabButton: $("scheduleTabButton"),
+      compareView: $("compareView"),
+      scheduleView: $("scheduleView"),
+      scheduleQuoteSource: $("scheduleQuoteSource"),
+      scheduleContractDate: $("scheduleContractDate"),
+      scheduleContractMonths: $("scheduleContractMonths"),
+      schedulePlanMonths: $("schedulePlanMonths"),
+      contractEndPreview: $("contractEndPreview"),
+      planChangePreview: $("planChangePreview"),
+      scheduleAddonList: $("scheduleAddonList"),
+      addScheduleAddonButton: $("addScheduleAddonButton"),
+      registerContractEndButton: $("registerContractEndButton"),
+      registerPlanChangeButton: $("registerPlanChangeButton"),
+      registerAllScheduleButton: $("registerAllScheduleButton"),
+      currentCarrier: $("currentCarrier"),
+      currentPlan: $("currentPlan"),
+      currentChoiceEnabled: $("currentChoiceEnabled"),
+      currentChoiceRule: $("currentChoiceRule"),
+      currentChoiceRuleField: $("currentChoiceRuleField"),
+      currentChoiceRuleNote: $("currentChoiceRuleNote"),
+      currentChoiceDiscountPreview: $("currentChoiceDiscountPreview"),
+      currentChoiceBaseAdjustmentField: $("currentChoiceBaseAdjustmentField"),
+      currentChoiceBaseAdjustment: $("currentChoiceBaseAdjustment"),
+      currentTruncateWon: $("currentTruncateWon"),
+      currentDiscountList: $("currentDiscountList"),
+      addCurrentDiscountButton: $("addCurrentDiscountButton"),
+      currentAddonList: $("currentAddonList"),
+      addCurrentAddonButton: $("addCurrentAddonButton"),
+      saveCurrentButton: $("saveCurrentButton"),
+      currentDirtyNote: $("currentDirtyNote"),
+
+      quoteName: $("quoteName"),
+      futureCarrier: $("futureCarrier"),
+      futureChoiceEnabled: $("futureChoiceEnabled"),
+      futureChoiceRule: $("futureChoiceRule"),
+      futureChoiceRuleField: $("futureChoiceRuleField"),
+      futureChoiceRuleNote: $("futureChoiceRuleNote"),
+      futureChoiceDiscountPreview: $("futureChoiceDiscountPreview"),
+      futureChoiceBaseAdjustmentField: $("futureChoiceBaseAdjustmentField"),
+      futureChoiceBaseAdjustment: $("futureChoiceBaseAdjustment"),
+      deviceValue: $("deviceValue"),
+      deviceValueLabel: $("deviceValueLabel"),
+      installmentMonths: $("installmentMonths"),
+      installmentFeeRate: $("installmentFeeRate"),
+      oneTimeCost: $("oneTimeCost"),
+      initialPlan: $("initialPlan"),
+      requiredMonths: $("requiredMonths"),
+      afterPlan: $("afterPlan"),
+      futureTruncateWon: $("futureTruncateWon"),
+      futureDiscountPreview: $("futureDiscountPreview"),
+      futureDiscountList: $("futureDiscountList"),
+      addFutureDiscountButton: $("addFutureDiscountButton"),
+      addonList: $("addonList"),
+      addAddonButton: $("addAddonButton"),
+      compareButton: $("compareButton"),
+      compareValidation: $("compareValidation"),
+      resetButton: $("resetButton"),
+
+      resultPlaceholder: $("resultPlaceholder"),
+      currentSummaryCard: $("currentSummaryCard"),
+      currentSavedMonthly: $("currentSavedMonthly"),
+      currentSavedCarrier: $("currentSavedCarrier"),
+      currentSaved24Total: $("currentSaved24Total"),
+      currentSavedAddonMonthly: $("currentSavedAddonMonthly"),
+      currentSavedChoice: $("currentSavedChoice"),
+      currentSavedExtraSaving: $("currentSavedExtraSaving"),
+      currentSavedTruncate: $("currentSavedTruncate"),
+      currentDiscountSummary: $("currentDiscountSummary"),
+      comparisonList: $("comparisonList"),
+      resultTools: $("resultTools"),
+      exportImageButton: $("exportImageButton"),
+      scheduleFromResultButton: $("scheduleFromResultButton"),
+      exportHost: $("exportHost"),
+      toast: $("toast")
+    };
+
+    /* ======================================================================
+       [2] 공통 유틸리티
+       ====================================================================== */
+    function parseMoney(value) {
+      const cleaned = String(value ?? "").replace(/[^0-9.-]/g, "");
+      const number = Number(cleaned);
+      return Number.isFinite(number) ? number : 0;
+    }
+
+    function clampPercent(value) {
+      return Math.min(100, Math.max(0, Number(value) || 0));
+    }
+
+    function nonNegativeInteger(value) {
+      return Math.max(0, Math.floor(Number(value) || 0));
+    }
+
+    function won(value) {
+      const rounded = Math.round(Number(value) || 0);
+      return `${rounded.toLocaleString("ko-KR")}원`;
+    }
+
+    function formatMoneyInput(input) {
+      input.value = Math.max(0, parseMoney(input.value)).toLocaleString("ko-KR");
+    }
+
+    function truncateWonUnit(value) {
+      // '원단위 절삭'을 10원 미만 절삭으로 처리합니다.
+      // 예: 51,757.5원 -> 51,750원
+      return Math.floor(Math.max(0, Number(value) || 0) / 10) * 10;
+    }
+
+    /*
+      선택약정 할인 계산 - V2.10 계산 원장 방식
+      ----------------------------------------------------------------------
+      중요한 점은 'VAT 포함 할인액'과 'VAT 제외 공급가 할인액'을 동시에 보관하는 것입니다.
+      SKT 자동납부처럼 뒤의 할인이 공급가액을 기준으로 계산될 때
+      VAT 포함 금액을 다시 / 1.1 해서 역산하지 않기 위해서입니다.
+
+      rule = standard
+        - 월정액(VAT 포함)의 25%
+        - 공급가 할인액은 실제 VAT 포함 할인액 / 1.1
+
+      rule = afterPlanDiscount
+        - (월정액 - 기존 요금약정 할인액)의 25%
+
+      rule = sktLegacy
+        - 공급가액 x 25%
+        - 공급가 할인액을 50원 단위 올림
+        - 그 공급가 할인액에 VAT 10%를 더한 금액을 실제 할인액으로 사용
+        - 예: 69,000원 -> 공급가 할인 15,700원 -> VAT 포함 17,270원
+    */
+    function calculateChoiceDiscountBreakdown(grossPlan, carrier = "SKT", rule = "standard", priorPlanDiscount = 0) {
+      const gross = Math.max(0, Number(grossPlan) || 0);
+      const baseSupply = gross / 1.1;
+      if (!gross) {
+        return {
+          grossSaving: 0,
+          supplySaving: 0,
+          rawSupplySaving: 0,
+          baseSupply,
+          rule
+        };
+      }
+
+      if (rule === "afterPlanDiscount") {
+        const eligibleGross = Math.max(0, gross - Math.max(0, Number(priorPlanDiscount) || 0));
+        const grossSaving = Math.min(gross, Math.round(eligibleGross * (CHOICE_DISCOUNT_RATE / 100)));
+        return {
+          grossSaving,
+          supplySaving: grossSaving / 1.1,
+          rawSupplySaving: (eligibleGross / 1.1) * (CHOICE_DISCOUNT_RATE / 100),
+          baseSupply,
+          eligibleGross,
+          rule
+        };
+      }
+
+      if (carrier === "SKT" && rule === "sktLegacy") {
+        const rawSupplySaving = baseSupply * (CHOICE_DISCOUNT_RATE / 100);
+        const supplySaving = Math.ceil((rawSupplySaving - 1e-9) / 50) * 50;
+        const grossSaving = Math.min(gross, Math.round(supplySaving * 1.1));
+        return {
+          grossSaving,
+          supplySaving,
+          rawSupplySaving,
+          baseSupply,
+          rule
+        };
+      }
+
+      const grossSaving = Math.min(gross, Math.round(gross * (CHOICE_DISCOUNT_RATE / 100)));
+      return {
+        grossSaving,
+        supplySaving: grossSaving / 1.1,
+        rawSupplySaving: baseSupply * (CHOICE_DISCOUNT_RATE / 100),
+        baseSupply,
+        rule
+      };
+    }
+
+    // 기존 UI 함수들은 숫자 하나만 필요하므로 호환용 wrapper를 유지합니다.
+    function calculateChoiceDiscount(grossPlan, carrier = "SKT", rule = "standard", priorPlanDiscount = 0) {
+      return calculateChoiceDiscountBreakdown(grossPlan, carrier, rule, priorPlanDiscount).grossSaving;
+    }
+
+    /* 선택약정 계산방식 바로 아래에 실제 할인 예상액을 표시합니다. */
+    function updateChoiceDiscountPreviews() {
+      const currentCarrier = elements.currentCarrier.value;
+      const currentEnabled = elements.currentChoiceEnabled.checked;
+      const currentBase = Math.max(0, parseMoney(elements.currentPlan.value));
+      const currentAdjustment = Math.max(0, parseMoney(elements.currentChoiceBaseAdjustment.value));
+      const currentSaving = currentEnabled
+        ? calculateChoiceDiscount(currentBase, currentCarrier, elements.currentChoiceRule.value || "standard", currentAdjustment)
+        : 0;
+      elements.currentChoiceDiscountPreview.textContent = currentEnabled ? `월 할인 예상 -${won(currentSaving)}` : "";
+
+      const futureCarrier = resolveFutureCarrier();
+      const futureEnabled = elements.futureChoiceEnabled.checked;
+      const futureAdjustment = Math.max(0, parseMoney(elements.futureChoiceBaseAdjustment.value));
+      const initialBase = Math.max(0, parseMoney(elements.initialPlan.value));
+      const afterBase = Math.max(0, parseMoney(elements.afterPlan.value));
+      const rule = elements.futureChoiceRule.value || "standard";
+      const initialSaving = futureEnabled ? calculateChoiceDiscount(initialBase, futureCarrier, rule, futureAdjustment) : 0;
+      const afterSaving = futureEnabled ? calculateChoiceDiscount(afterBase, futureCarrier, rule, futureAdjustment) : 0;
+
+      if (!futureEnabled) elements.futureChoiceDiscountPreview.textContent = "";
+      else if (initialBase === afterBase) elements.futureChoiceDiscountPreview.textContent = `월 할인 예상 -${won(initialSaving)}`;
+      else elements.futureChoiceDiscountPreview.textContent = `초기 -${won(initialSaving)} · 이후 -${won(afterSaving)}`;
+    }
+
+    function populateChoiceRuleSelect(select, carrier, preferredValue) {
+      const options = carrier === "SKT"
+        ? [
+            ["standard", "현행 월정액 25%"],
+            ["sktLegacy", "기존 SKT 정산방식"],
+            ["afterPlanDiscount", "기존 요금약정 할인 후 25%"]
+          ]
+        : carrier === "KT" || carrier === "LGU"
+          ? [
+              ["standard", "월정액 25%"],
+              ["afterPlanDiscount", "기존 요금약정 할인 후 25%"]
+            ]
+          : [["standard", "월정액 25%"]];
+
+      select.innerHTML = options.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+      if (preferredValue && options.some(([value]) => value === preferredValue)) {
+        select.value = preferredValue;
+      }
+    }
+
+    function resolveFutureCarrier() {
+      return elements.futureCarrier.value === "SAME"
+        ? (appState.currentSaved?.state.carrier || elements.currentCarrier.value)
+        : elements.futureCarrier.value;
+    }
+
+    function syncChoiceRuleUI(scope, preserve = true) {
+      const isCurrent = scope === "current";
+      const carrier = isCurrent ? elements.currentCarrier.value : resolveFutureCarrier();
+      const select = isCurrent ? elements.currentChoiceRule : elements.futureChoiceRule;
+      const note = isCurrent ? elements.currentChoiceRuleNote : elements.futureChoiceRuleNote;
+      const adjustmentField = isCurrent ? elements.currentChoiceBaseAdjustmentField : elements.futureChoiceBaseAdjustmentField;
+      const enabled = isCurrent ? elements.currentChoiceEnabled.checked : elements.futureChoiceEnabled.checked;
+      const previous = preserve ? select.value : "standard";
+      populateChoiceRuleSelect(select, carrier, previous);
+      select.disabled = !enabled;
+      adjustmentField.classList.toggle("hidden", !enabled || select.value !== "afterPlanDiscount");
+
+      if (!enabled) {
+        note.textContent = "선택약정 미적용";
+      } else if (select.value === "afterPlanDiscount") {
+        note.textContent = "월정액에서 기존 요금약정 할인을 먼저 뺀 뒤 25%";
+      } else if (carrier === "SKT") {
+        note.textContent = select.value === "sktLegacy"
+          ? "일부 기존 SKT 약정의 끝자리 정산 방식"
+          : "현행 SKT 요금제 기준 25%";
+      } else {
+        note.textContent = `${CARRIER_LABELS[carrier]} 월정액 25% 기준`;
+      }
+      updateChoiceDiscountPreviews();
+    }
+
+    /*
+      SKT자동납부할인 - 공급가액 원장 기준
+      ----------------------------------------------------------------------
+      이 할인은 VAT 포함 잔액을 다시 /1.1 해서 추정하지 않습니다.
+      앞 단계에서 실제로 누적해 둔 '남은 공급가액'을 그대로 받습니다.
+
+      계산 순서
+      1) 선택약정/온가족 등 모든 선행할인 후 남은 공급가액
+      2) 남은 공급가액 x 1%
+      3) 할인액에 VAT 10% 가산
+      4) 최종 원 단위 올림
+      5) 월 최대 1,000원
+
+      예) 69,000원 + 기존 SKT 선택약정 + 온가족 30%
+          기본 공급가     62,727.27...
+          선택약정 공급가 -15,700
+          온가족 공급가   -18,818.18...
+          대상 공급가      28,209.09...
+          1% 공급가 할인      282.09...
+          VAT 포함 할인       310.30...
+          원 단위 올림         311원
+    */
+    function calculateAutoPayDiscount(remainingSupplyBeforeAutoPay) {
+      const eligibleSupply = Math.max(0, Number(remainingSupplyBeforeAutoPay) || 0);
+      const rawSupplyDiscount = eligibleSupply * 0.01;
+      const rawVatIncludedDiscount = rawSupplyDiscount * 1.1;
+
+      // JS 부동소수점 때문에 311.00000000001 같은 값이 312가 되지 않도록 epsilon을 뺍니다.
+      const roundedUpWon = Math.ceil(rawVatIncludedDiscount - 1e-9);
+      const saving = Math.min(1000, roundedUpWon);
+
+      return {
+        saving,
+        eligibleSupply,
+        rawSupplyDiscount,
+        rawVatIncludedDiscount
+      };
+    }
+
+    /*
+      0이 들어 있는 입력칸의 사용성을 개선합니다.
+      값이 정확히 0인 칸을 클릭하면 빈칸으로 만들어 바로 숫자를 입력할 수 있고,
+      아무것도 쓰지 않고 빠져나오면 다시 0을 넣습니다.
+    */
+    function bindZeroFriendlyInput(input) {
+      if (!input || input.dataset.zeroFriendlyBound === "true") return;
+      input.dataset.zeroFriendlyBound = "true";
+
+      input.addEventListener("focus", () => {
+        if (parseMoney(input.value) === 0) input.value = "";
+      });
+
+      input.addEventListener("blur", () => {
+        if (String(input.value).trim() === "") input.value = "0";
+        if (input.classList.contains("money-input")) formatMoneyInput(input);
+      });
+    }
+
+    function bindZeroFriendlyInputs(root = document) {
+      root.querySelectorAll('input[type="number"], .money-input').forEach(bindZeroFriendlyInput);
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function getCheckedValue(name) {
+      return document.querySelector(`input[name="${name}"]:checked`)?.value;
+    }
+
+    function setRadioValue(name, value) {
+      const radio = document.querySelector(`input[name="${name}"][value="${value}"]`);
+      if (radio) radio.checked = true;
+    }
+
+    function setMoneyInput(input, value) {
+      input.value = Math.max(0, Number(value) || 0).toLocaleString("ko-KR");
+    }
+
+    function storageGet(key) {
+      try { return localStorage.getItem(key); } catch (error) { return null; }
+    }
+
+    function storageSet(key, value) {
+      try { localStorage.setItem(key, value); return true; } catch (error) { return false; }
+    }
+
+    /* ======================================================================
+       [3] 할인 프리셋 / 할인 행 만들기
+       ----------------------------------------------------------------------
+       V2.10에서는 통신사별 대표 할인은 프리셋으로 제공하고,
+       직접 입력에서만 상세 계산기준을 열어줍니다.
+
+       할인 기준(basis)
+       - baseGross       : VAT 포함 기본요금
+       - afterChoiceGross: 선택약정 적용 후 금액
+       - afterAllGross   : 앞선 할인을 모두 적용한 뒤 남은 금액
+       - baseSupply      : VAT 제외 기본요금 공급가액
+       - afterAllSupply  : 앞선 할인 후 남은 금액의 VAT 제외 공급가액
+       ====================================================================== */
+    function getDiscountScopeCarrier(scope) {
+      return scope === "current" ? elements.currentCarrier.value : resolveFutureCarrier();
+    }
+
+    function discountPresetOptionsHtml(carrier, selected = "choose") {
+      const providerOptions = CARRIER_PRESET_OPTIONS[carrier] || [];
+      const groups = [];
+
+      if (providerOptions.length) {
+        groups.push(`<optgroup label="${escapeHtml(CARRIER_LABELS[carrier])}">${providerOptions.map(([value, label]) =>
+          `<option value="${value}" ${selected === value ? "selected" : ""}>${escapeHtml(label)}</option>`
+        ).join("")}</optgroup>`);
+      }
+
+      groups.push(`<optgroup label="공통">${COMMON_PRESET_OPTIONS.map(([value, label]) =>
+        `<option value="${value}" ${selected === value ? "selected" : ""}>${escapeHtml(label)}</option>`
+      ).join("")}</optgroup>`);
+
+      return `<option value="choose" ${selected === "choose" ? "selected" : ""} disabled>할인 종류 선택</option>${groups.join("")}`;
+    }
+
+    function getPresetConfig(preset, carrier) {
+      const configs = {
+        skt_family: { name: "SKT 온가족할인", type: "percent", basis: "baseGross", value: 30, valueLocked: false, carrierScope: "SKT" },
+        skt_autopay: { name: "SKT 자동납부할인", type: "autopay", basis: "afterAllSupply", value: 1, valueLocked: true, carrierScope: "SKT" },
+        skt_family_bundle_fixed: { name: "SKT 가족결합 할인", type: "fixed", basis: "afterAllGross", value: 0, valueLocked: false, carrierScope: "SKT" },
+        kt_premium_family: { name: "KT 프리미엄 가족결합", type: "percent", basis: "baseGross", value: 25, valueLocked: true, carrierScope: "KT" },
+        kt_premium_single: { name: "KT 프리미엄 싱글결합", type: "percent", basis: "baseGross", value: 25, valueLocked: true, carrierScope: "KT" },
+        kt_total_bundle: { name: "KT 총액결합할인", type: "fixed", basis: "afterAllGross", value: 0, valueLocked: false, carrierScope: "KT" },
+        kt_fixed_bundle: { name: "KT 정액결합할인", type: "fixed", basis: "afterAllGross", value: 0, valueLocked: false, carrierScope: "KT" },
+        lgu_easy_family: { name: "LG U+ 참 쉬운 가족결합", type: "fixed", basis: "afterAllGross", value: 0, valueLocked: false, carrierScope: "LGU" },
+        lgu_family_love: { name: "LG U+ 가족무한사랑", type: "fixed", basis: "afterAllGross", value: 0, valueLocked: false, carrierScope: "LGU" },
+        lgu_bundle_percent: { name: "LG U+ 결합 정률할인", type: "percent", basis: "baseGross", value: 0, valueLocked: false, carrierScope: "LGU" },
+        lgu_bundle_fixed: { name: "LG U+ 결합 정액할인", type: "fixed", basis: "afterAllGross", value: 0, valueLocked: false, carrierScope: "LGU" },
+        generic_base_percent: { name: "기본요금 정률할인", type: "percent", basis: "baseGross", value: 0, valueLocked: false, carrierScope: "ANY" },
+        generic_after_choice_percent: { name: "선택약정 후 정률할인", type: "percent", basis: "afterChoiceGross", value: 0, valueLocked: false, carrierScope: "ANY" },
+        generic_after_all_percent: { name: "모든 선행할인 후 정률할인", type: "percent", basis: "afterAllGross", value: 0, valueLocked: false, carrierScope: "ANY" },
+        generic_fixed: { name: "월 정액할인", type: "fixed", basis: "afterAllGross", value: 0, valueLocked: false, carrierScope: "ANY" },
+        custom: { name: "", type: "percent", basis: "afterChoiceGross", value: 0, valueLocked: false, carrierScope: "ANY" }
+      };
+      return configs[preset] || configs.custom;
+    }
+
+    function isProviderPresetAllowed(preset, carrier) {
+      const config = getPresetConfig(preset, carrier);
+      return config.carrierScope === "ANY" || config.carrierScope === carrier;
+    }
+
+    function makeDiscountUid() {
+      return `discount-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function addDiscountRow(scope, data = {}) {
+      const isCurrent = scope === "current";
+      const list = isCurrent ? elements.currentDiscountList : elements.futureDiscountList;
+      const carrier = getDiscountScopeCarrier(scope);
+      const row = document.createElement("div");
+      row.className = "discount-row";
+      row.dataset.scope = scope;
+      row.dataset.discountUid = data.uid || makeDiscountUid();
+
+      let preset = data.preset || "choose";
+      if (!isProviderPresetAllowed(preset, carrier)) preset = "choose";
+      const config = getPresetConfig(preset, carrier);
+
+      row.innerHTML = `
+        <div class="discount-row-grid">
+          <div class="discount-preset-wrap">
+            <select class="discount-preset ${isCurrent ? "current-source" : ""}" aria-label="할인 종류">
+              ${discountPresetOptionsHtml(carrier, preset)}
+            </select>
+            <input class="discount-custom-name ${isCurrent ? "current-source" : ""} hidden" type="text" value="${escapeHtml(data.name || "")}" placeholder="할인 명칭" aria-label="할인 명칭" />
+            <button class="preset-return-button hidden" type="button" title="할인 종류 다시 선택">종류</button>
+          </div>
+
+          <select class="discount-type ${isCurrent ? "current-source" : ""}" aria-label="할인 방식">
+            <option value="percent">퍼센트 할인</option>
+            <option value="fixed">월 정액 할인</option>
+          </select>
+
+          <div class="input-wrap has-suffix discount-value-wrap">
+            <input class="discount-value ${isCurrent ? "current-source" : ""}" type="number" min="0" step="0.1" value="${Number(data.value ?? config.value) || 0}" aria-label="할인 값" />
+            <span class="suffix discount-suffix">%</span>
+          </div>
+
+          <select class="discount-basis ${isCurrent ? "current-source" : ""}" aria-label="할인 기준">
+            <option value="baseGross">기본요금 기준</option>
+            <option value="afterChoiceGross">선택약정 후 기준</option>
+            <option value="afterAllGross">모든 선행할인 후 기준</option>
+            <option value="baseSupply">VAT 제외 기본요금 기준</option>
+            <option value="afterAllSupply">VAT 제외 선행할인 후 기준</option>
+          </select>
+
+          <button class="remove-button" type="button" aria-label="할인 삭제">×</button>
+        </div>
+
+        <div class="discount-advanced hidden">
+          <div>
+            <label class="field-label">끝자리 처리</label>
+            <select class="discount-rounding ${isCurrent ? "current-source" : ""}">
+              <option value="none">처리 없음</option>
+              <option value="floorWon">원 미만 절사</option>
+              <option value="ceilWon">원 단위 올림</option>
+              <option value="roundWon">원 단위 반올림</option>
+              <option value="floor10">10원 미만 절사</option>
+              <option value="ceil10">10원 단위 올림</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">월 최대 할인액</label>
+            <div class="input-wrap has-suffix">
+              <input class="discount-cap money-input ${isCurrent ? "current-source" : ""}" inputmode="numeric" type="text" value="${Math.max(0, Number(data.maxDiscount) || 0).toLocaleString("ko-KR")}" />
+              <span class="suffix">원</span>
+            </div>
+          </div>
+        </div>
+
+        ${isCurrent ? `
+          <label class="discount-carry">
+            <input class="discount-carry-check current-source" type="checkbox" ${data.carryToFuture ? "checked" : ""} />
+            <span>기기 교체 후에도 할인 동일</span>
+          </label>
+        ` : ""}
+        <div class="discount-live-preview">월 할인액: 0원</div>
+      `;
+
+      const presetSelect = row.querySelector(".discount-preset");
+      const customName = row.querySelector(".discount-custom-name");
+      const returnButton = row.querySelector(".preset-return-button");
+      const typeSelect = row.querySelector(".discount-type");
+      const valueWrap = row.querySelector(".discount-value-wrap");
+      const valueInput = row.querySelector(".discount-value");
+      const suffix = row.querySelector(".discount-suffix");
+      const basisSelect = row.querySelector(".discount-basis");
+      const advanced = row.querySelector(".discount-advanced");
+      const rounding = row.querySelector(".discount-rounding");
+      const cap = row.querySelector(".discount-cap");
+
+      function applyDataOnce() {
+        if (data.type) typeSelect.value = data.type === "autopay" ? "percent" : data.type;
+        if (data.basis) basisSelect.value = data.basis;
+        if (data.rounding) rounding.value = data.rounding;
+      }
+
+      function syncRow(resetValue = false) {
+        const selectedPreset = presetSelect.value;
+        const currentCarrier = getDiscountScopeCarrier(scope);
+        const selectedConfig = getPresetConfig(selectedPreset, currentCarrier);
+        const isCustom = selectedPreset === "custom";
+        const isChoose = selectedPreset === "choose";
+        const isAutoPay = selectedPreset === "skt_autopay";
+
+        presetSelect.classList.toggle("hidden", isCustom);
+        customName.classList.toggle("hidden", !isCustom);
+        returnButton.classList.toggle("hidden", !isCustom);
+        advanced.classList.toggle("hidden", !isCustom);
+
+        if (isChoose) {
+          typeSelect.disabled = true;
+          basisSelect.disabled = true;
+          valueWrap.classList.add("hidden");
+        } else if (isAutoPay) {
+          typeSelect.value = "percent";
+          typeSelect.disabled = true;
+          basisSelect.value = "afterAllSupply";
+          basisSelect.disabled = true;
+          valueWrap.classList.add("hidden");
+          valueInput.value = "1";
+        } else if (!isCustom) {
+          typeSelect.value = selectedConfig.type;
+          typeSelect.disabled = true;
+          basisSelect.value = selectedConfig.basis;
+          basisSelect.disabled = true;
+          valueWrap.classList.remove("hidden");
+          if (resetValue || valueInput.value === "") valueInput.value = selectedConfig.value;
+          valueInput.disabled = selectedConfig.valueLocked;
+          suffix.textContent = selectedConfig.type === "fixed" ? "원" : "%";
+          valueInput.step = selectedConfig.type === "fixed" ? "1000" : "0.1";
+        } else {
+          typeSelect.disabled = false;
+          valueWrap.classList.remove("hidden");
+          valueInput.disabled = false;
+          basisSelect.disabled = typeSelect.value === "fixed";
+          if (typeSelect.value === "fixed") basisSelect.value = "afterAllGross";
+          suffix.textContent = typeSelect.value === "fixed" ? "원" : "%";
+          valueInput.step = typeSelect.value === "fixed" ? "1000" : "0.1";
+        }
+
+        updateDiscountLivePreviews(scope);
+      }
+
+      presetSelect.addEventListener("change", () => syncRow(true));
+      typeSelect.addEventListener("change", () => syncRow(false));
+      returnButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        presetSelect.value = "choose";
+        presetSelect.classList.remove("hidden");
+        customName.classList.add("hidden");
+        returnButton.classList.add("hidden");
+        syncRow(true);
+        presetSelect.focus();
+      });
+
+      if (isCurrent) {
+        row.querySelectorAll(".current-source").forEach((input) => {
+          input.addEventListener("input", markCurrentDirty);
+          input.addEventListener("change", markCurrentDirty);
+        });
+      } else {
+        row.querySelectorAll("input, select").forEach((input) => {
+          input.addEventListener("input", () => updateDiscountLivePreviews("future"));
+          input.addEventListener("change", () => updateDiscountLivePreviews("future"));
+        });
+      }
+
+      row.querySelector(".remove-button").addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        row.remove();
+        if (isCurrent) markCurrentDirty();
+        else updateDiscountLivePreviews("future");
+      });
+
+      list.appendChild(row);
+      applyDataOnce();
+      syncRow(false);
+      bindZeroFriendlyInputs(row);
+    }
+
+    function addCurrentDiscountRow(data = {}) { addDiscountRow("current", data); }
+    function addFutureDiscountRow(data = {}) { addDiscountRow("future", data); }
+
+    function refreshDiscountPresetOptions(scope) {
+      const carrier = getDiscountScopeCarrier(scope);
+      const list = scope === "current" ? elements.currentDiscountList : elements.futureDiscountList;
+      list.querySelectorAll(".discount-row").forEach((row) => {
+        const select = row.querySelector(".discount-preset");
+        const oldValue = select.value;
+        const valid = oldValue === "choose" || oldValue === "custom" || isProviderPresetAllowed(oldValue, carrier);
+        select.innerHTML = discountPresetOptionsHtml(carrier, valid ? oldValue : "choose");
+        if (!valid) {
+          row.querySelector(".discount-custom-name").classList.add("hidden");
+          row.querySelector(".preset-return-button").classList.add("hidden");
+          select.classList.remove("hidden");
+        }
+        // change 이벤트를 발생시켜 숨김/잠금 상태도 새 통신사 프리셋에 맞춥니다.
+        select.dispatchEvent(new Event("change"));
+      });
+      updateDiscountLivePreviews(scope);
+    }
+
+    function readDiscounts(scope) {
+      const isCurrent = scope === "current";
+      const list = isCurrent ? elements.currentDiscountList : elements.futureDiscountList;
+      const carrier = getDiscountScopeCarrier(scope);
+
+      return [...list.querySelectorAll(".discount-row")].map((row, index) => {
+        const preset = row.querySelector(".discount-preset").value;
+        if (preset === "choose") return null;
+
+        const config = getPresetConfig(preset, carrier);
+        const customName = row.querySelector(".discount-custom-name")?.value.trim();
+        const type = preset === "skt_autopay" ? "autopay" : row.querySelector(".discount-type").value;
+        const rawValue = row.querySelector(".discount-value").value;
+        const value = type === "fixed"
+          ? Math.max(0, parseMoney(rawValue))
+          : type === "autopay" ? 1 : clampPercent(rawValue);
+
+        return {
+          uid: row.dataset.discountUid,
+          preset,
+          name: preset === "custom" ? (customName || `직접 입력 할인 ${index + 1}`) : config.name,
+          type,
+          value,
+          basis: preset === "custom" ? row.querySelector(".discount-basis").value : config.basis,
+          rounding: preset === "custom" ? row.querySelector(".discount-rounding").value : (preset === "skt_autopay" ? "ceilWon" : "none"),
+          maxDiscount: preset === "custom" ? Math.max(0, parseMoney(row.querySelector(".discount-cap").value)) : (preset === "skt_autopay" ? 1000 : 0),
+          carrierScope: config.carrierScope,
+          carryToFuture: isCurrent ? row.querySelector(".discount-carry-check").checked : false
+        };
+      }).filter((item) => item && (item.type === "autopay" || item.value > 0));
+    }
+
+    function readCurrentDiscounts() { return readDiscounts("current"); }
+    function readFutureDiscounts() { return readDiscounts("future"); }
+
+    function discountDescription(discount) {
+      if (discount.type === "autopay") return `${discount.name}: 선행할인 후 1% (최대 1,000원)`;
+      if (discount.type === "fixed") return `${discount.name}: 월 ${won(discount.value)}`;
+      const basisLabels = {
+        baseGross: "기본요금 기준",
+        afterChoiceGross: "선택약정 후 기준",
+        afterAllGross: "선행할인 후 기준",
+        baseSupply: "VAT 제외 기본요금 기준",
+        afterAllSupply: "VAT 제외 선행할인 후 기준"
+      };
+      return `${discount.name}: ${discount.value}% (${basisLabels[discount.basis] || "직접 기준"})`;
+    }
+
+    function updateDiscountLivePreviews(scope) {
+      const isCurrent = scope === "current";
+      const list = isCurrent ? elements.currentDiscountList : elements.futureDiscountList;
+      if (!list) return;
+
+      const carrier = getDiscountScopeCarrier(scope);
+      const base = isCurrent ? Math.max(0, parseMoney(elements.currentPlan.value)) : Math.max(0, parseMoney(elements.initialPlan.value));
+      const choiceEnabled = isCurrent ? elements.currentChoiceEnabled.checked : elements.futureChoiceEnabled.checked;
+      const choiceRule = isCurrent ? elements.currentChoiceRule.value : elements.futureChoiceRule.value;
+      const ownDiscounts = readDiscounts(scope);
+      const carried = !isCurrent && appState.currentSaved && !appState.currentDirty
+        ? appState.currentSaved.state.discounts.filter((item) => item.carryToFuture && (item.carrierScope === "ANY" || item.carrierScope === carrier))
+        : [];
+      const choiceBaseAdjustment = isCurrent
+        ? Math.max(0, parseMoney(elements.currentChoiceBaseAdjustment.value))
+        : Math.max(0, parseMoney(elements.futureChoiceBaseAdjustment.value));
+      const result = calculatePlanCharge(base, choiceEnabled, choiceRule, choiceBaseAdjustment, carrier, [...carried, ...ownDiscounts], false);
+      const byUid = new Map(result.discountDetails.map((item) => [item.uid, item]));
+
+      list.querySelectorAll(".discount-row").forEach((row) => {
+        const detail = byUid.get(row.dataset.discountUid);
+        const preview = row.querySelector(".discount-live-preview");
+        if (!detail) {
+          preview.textContent = "월 할인액: 0원";
+          return;
+        }
+
+        if (detail.type === "autopay" && Number.isFinite(detail.calculatedBaseSupply)) {
+          const supplyBase = Number(detail.calculatedBaseSupply) || 0;
+          const rawSupply = Number(detail.calculatedRawSupplySaving) || 0;
+          const rawGross = Number(detail.calculatedRawSaving) || 0;
+          const supplyText = supplyBase.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+          const rawSupplyText = rawSupply.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+          const rawGrossText = rawGross.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+          preview.textContent = `월 할인액: ${won(detail.calculatedSaving)} · 대상 공급가 ${supplyText}원 × 1% = ${rawSupplyText}원 · VAT 포함 ${rawGrossText}원 → 원단위 올림`;
+        } else {
+          preview.textContent = `월 할인액: ${won(detail.calculatedSaving)}`;
+        }
+      });
+    }
+
+    /* ======================================================================
+       [4] 부가서비스 행 만들기
+       ====================================================================== */
+    function createAddonRow(type, data = {}) {
+      const future = type === "future";
+      const row = document.createElement("div");
+      row.className = `addon-row${future ? " with-months" : ""}`;
+      row.innerHTML = `
+        <input class="addon-name ${future ? "" : "current-source"}" type="text" placeholder="서비스명 (선택)" value="${escapeHtml(data.name || "")}" />
+        <div class="input-wrap has-suffix">
+          <input class="addon-price money-input ${future ? "" : "current-source"}" inputmode="numeric" type="text" value="${Math.max(0, Number(data.price) || 0).toLocaleString("ko-KR")}" />
+          <span class="suffix">원</span>
+        </div>
+        ${future ? `
+          <div class="input-wrap has-suffix addon-months">
+            <input class="addon-months-input" type="number" min="0" max="60" step="1" value="${nonNegativeInteger(data.months || 0)}" />
+            <span class="suffix">개월</span>
+          </div>
+        ` : ""}
+        <button class="remove-button" type="button" aria-label="부가서비스 삭제">×</button>
+      `;
+
+      if (!future) {
+        row.querySelectorAll(".current-source").forEach((input) => {
+          input.addEventListener("input", markCurrentDirty);
+          input.addEventListener("change", markCurrentDirty);
+        });
+      }
+
+      bindZeroFriendlyInputs(row);
+
+      row.querySelector(".remove-button").addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        row.remove();
+        if (!future) markCurrentDirty();
+      });
+
+      return row;
+    }
+
+    function addCurrentAddonRow(data = {}) {
+      elements.currentAddonList.appendChild(createAddonRow("current", data));
+    }
+
+    function addFutureAddonRow(data = {}) {
+      elements.addonList.appendChild(createAddonRow("future", data));
+    }
+
+    function readCurrentAddons() {
+      return [...elements.currentAddonList.querySelectorAll(".addon-row")].map((row) => ({
+        name: row.querySelector(".addon-name").value.trim(),
+        price: Math.max(0, parseMoney(row.querySelector(".addon-price").value))
+      })).filter((item) => item.name || item.price > 0);
+    }
+
+    function readFutureAddons() {
+      return [...elements.addonList.querySelectorAll(".addon-row")].map((row) => ({
+        name: row.querySelector(".addon-name").value.trim(),
+        price: Math.max(0, parseMoney(row.querySelector(".addon-price").value)),
+        months: nonNegativeInteger(row.querySelector(".addon-months-input").value)
+      })).filter((item) => item.name || item.price > 0 || item.months > 0);
+    }
+
+    /* ======================================================================
+       [5] 입력값 읽기
+       ====================================================================== */
+    function readCurrentFormState() {
+      return {
+        carrier: elements.currentCarrier.value,
+        plan: Math.max(0, parseMoney(elements.currentPlan.value)),
+        choiceEnabled: elements.currentChoiceEnabled.checked,
+        choiceRule: elements.currentChoiceRule.value || "standard",
+        choiceBaseAdjustment: Math.max(0, parseMoney(elements.currentChoiceBaseAdjustment.value)),
+        truncateWon: elements.currentTruncateWon.checked,
+        discounts: readCurrentDiscounts(),
+        addons: readCurrentAddons()
+      };
+    }
+
+    function readFutureFormState() {
+      return {
+        quoteName: elements.quoteName.value.trim() || "이름 없는 견적",
+        carrier: resolveFutureCarrier(),
+        carrierSelection: elements.futureCarrier.value,
+        compareMonths: nonNegativeInteger(getCheckedValue("compareMonths") || 24),
+        choiceEnabled: elements.futureChoiceEnabled.checked,
+        choiceRule: elements.futureChoiceRule.value || "standard",
+        choiceBaseAdjustment: Math.max(0, parseMoney(elements.futureChoiceBaseAdjustment.value)),
+        truncateWon: elements.futureTruncateWon.checked,
+        discounts: readFutureDiscounts(),
+        device: {
+          valueMode: getCheckedValue("deviceValueMode") || "price",
+          value: Math.max(0, parseMoney(elements.deviceValue.value)),
+          installmentMonths: nonNegativeInteger(elements.installmentMonths.value),
+          installmentFeeRate: clampPercent(elements.installmentFeeRate.value),
+          oneTimeCost: Math.max(0, parseMoney(elements.oneTimeCost.value))
+        },
+        plan: {
+          initial: Math.max(0, parseMoney(elements.initialPlan.value)),
+          requiredMonths: nonNegativeInteger(elements.requiredMonths.value),
+          after: Math.max(0, parseMoney(elements.afterPlan.value))
+        },
+        addons: readFutureAddons()
+      };
+    }
+
+    /* ======================================================================
+       [6] 요금제 할인 계산 핵심
+       ----------------------------------------------------------------------
+       계산 순서는 다음과 같습니다.
+       1) 통신사/선택한 방식에 따라 선택약정 계산
+       2) 사용자가 등록한 할인 순서대로 적용
+       3) '모든 선행할인 후' 할인은 그 시점의 남은 금액을 기준으로 계산
+       4) SKT 자동납부할인은 항상 가장 마지막에 계산
+       5) 최종 원단위 절삭 적용
+       ====================================================================== */
+    function applyDiscountRounding(value, mode) {
+      const n = Math.max(0, Number(value) || 0);
+      if (mode === "floorWon") return Math.floor(n);
+      if (mode === "ceilWon") return Math.ceil(n);
+      if (mode === "roundWon") return Math.round(n);
+      if (mode === "floor10") return Math.floor(n / 10) * 10;
+      if (mode === "ceil10") return Math.ceil(n / 10) * 10;
+      return n;
+    }
+
+    /*
+      일반 할인 계산도 VAT 포함/공급가액 두 값을 함께 반환합니다.
+      ----------------------------------------------------------------------
+      - grossSaving  : 실제 청구서에서 차감되는 VAT 포함 할인액
+      - supplySaving : 뒤의 공급가 기준 할인이 참고할 VAT 제외 할인액
+
+      일반 정액/정률 할인에서 별도 공급가 정산 규칙이 없는 경우,
+      실제 확정된 VAT 포함 할인액을 /1.1 하여 공급가 할인액으로 환산합니다.
+    */
+    function calculateDiscountSaving(discount, context) {
+      let rawGrossSaving = 0;
+      let rawSupplySaving = 0;
+
+      if (discount.type === "fixed") {
+        rawGrossSaving = Math.max(0, Number(discount.value) || 0);
+        rawSupplySaving = rawGrossSaving / 1.1;
+      } else {
+        const rate = clampPercent(discount.value) / 100;
+
+        if (discount.basis === "baseGross") {
+          rawGrossSaving = context.baseGross * rate;
+          rawSupplySaving = rawGrossSaving / 1.1;
+        } else if (discount.basis === "afterChoiceGross") {
+          rawGrossSaving = context.afterChoiceGross * rate;
+          rawSupplySaving = rawGrossSaving / 1.1;
+        } else if (discount.basis === "afterAllGross") {
+          rawGrossSaving = context.remainingGross * rate;
+          rawSupplySaving = rawGrossSaving / 1.1;
+        } else if (discount.basis === "baseSupply") {
+          rawSupplySaving = context.baseSupply * rate;
+          rawGrossSaving = rawSupplySaving * 1.1;
+        } else if (discount.basis === "afterAllSupply") {
+          rawSupplySaving = context.remainingSupply * rate;
+          rawGrossSaving = rawSupplySaving * 1.1;
+        }
+      }
+
+      // 화면의 '끝자리 처리'는 실제 청구되는 VAT 포함 할인액에 적용합니다.
+      let grossSaving = applyDiscountRounding(rawGrossSaving, discount.rounding || "none");
+      if (discount.maxDiscount > 0) grossSaving = Math.min(grossSaving, discount.maxDiscount);
+      grossSaving = Math.max(0, grossSaving);
+
+      // 끝자리 처리/한도 적용 후 실제 확정된 할인액 기준으로 공급가 원장도 맞춥니다.
+      const supplySaving = grossSaving / 1.1;
+
+      return {
+        grossSaving,
+        supplySaving,
+        rawGrossSaving,
+        rawSupplySaving
+      };
+    }
+
+    function calculatePlanCharge(basePlan, choiceEnabled, choiceRule, choiceBaseAdjustment, carrier, discounts, truncateWon) {
+      const baseGross = Math.max(0, Number(basePlan) || 0);
+      const baseSupply = baseGross / 1.1;
+
+      /* 1. 선택약정 ------------------------------------------------------- */
+      const choice = choiceEnabled
+        ? calculateChoiceDiscountBreakdown(baseGross, carrier, choiceRule, choiceBaseAdjustment)
+        : {
+            grossSaving: 0,
+            supplySaving: 0,
+            rawSupplySaving: 0,
+            baseSupply,
+            rule: choiceRule
+          };
+
+      const choiceSaving = Math.min(baseGross, choice.grossSaving);
+      const choiceSupplySaving = Math.min(baseSupply, choice.supplySaving);
+      const afterChoiceGross = Math.max(0, baseGross - choiceSaving);
+      const afterChoiceSupply = Math.max(0, baseSupply - choiceSupplySaving);
+
+      /* 2. 일반 할인 -------------------------------------------------------
+         자동납부 할인은 무조건 마지막이므로 여기서 분리합니다.
+         사용자가 자동납부를 위에 먼저 추가해도 계산순서에는 영향을 주지 않습니다.
+      */
+      const safeDiscounts = Array.isArray(discounts) ? discounts.filter(Boolean) : [];
+      const normalDiscounts = safeDiscounts.filter((discount) => discount.type !== "autopay" && discount.preset !== "skt_autopay");
+      const autoPayDiscount = safeDiscounts.find((discount) => discount.type === "autopay" || discount.preset === "skt_autopay");
+
+      let remainingGross = afterChoiceGross;
+      let remainingSupply = afterChoiceSupply;
+      const discountDetails = [];
+
+      normalDiscounts.forEach((discount) => {
+        const calculated = calculateDiscountSaving(discount, {
+          baseGross,
+          baseSupply,
+          afterChoiceGross,
+          afterChoiceSupply,
+          remainingGross,
+          remainingSupply
+        });
+
+        const grossSaving = Math.min(remainingGross, calculated.grossSaving);
+
+        // 일반 할인은 실제 VAT 포함 차감액에 대응하는 공급가액을 원장에 반영합니다.
+        // 단, 남은 공급가액보다 커질 수 없도록 제한합니다.
+        const supplySaving = Math.min(remainingSupply, grossSaving / 1.1);
+
+        remainingGross = Math.max(0, remainingGross - grossSaving);
+        remainingSupply = Math.max(0, remainingSupply - supplySaving);
+
+        discountDetails.push({
+          ...discount,
+          calculatedSaving: grossSaving,
+          calculatedSupplySaving: supplySaving,
+          calculatedRawSaving: calculated.rawGrossSaving,
+          calculatedRawSupplySaving: calculated.rawSupplySaving
+        });
+      });
+
+      const normalSavingsTotal = discountDetails.reduce((sum, item) => sum + item.calculatedSaving, 0);
+      const normalSupplySavingsTotal = discountDetails.reduce((sum, item) => sum + item.calculatedSupplySaving, 0);
+      const preAutoPayGross = remainingGross;
+      const preAutoPaySupply = remainingSupply;
+
+      /* 3. SKT 자동납부 할인 ---------------------------------------------- */
+      if (carrier === "SKT" && autoPayDiscount && preAutoPaySupply > 0) {
+        const autoPay = calculateAutoPayDiscount(preAutoPaySupply);
+        const grossSaving = Math.min(remainingGross, autoPay.saving);
+        const supplySaving = Math.min(remainingSupply, grossSaving / 1.1);
+
+        remainingGross = Math.max(0, remainingGross - grossSaving);
+        remainingSupply = Math.max(0, remainingSupply - supplySaving);
+
+        discountDetails.push({
+          ...autoPayDiscount,
+          calculatedSaving: grossSaving,
+          calculatedSupplySaving: supplySaving,
+          calculatedBase: preAutoPayGross,
+          calculatedBaseSupply: preAutoPaySupply,
+          calculatedRawSupplySaving: autoPay.rawSupplyDiscount,
+          calculatedRawSaving: autoPay.rawVatIncludedDiscount,
+          calculatedOriginalBase: baseGross,
+          calculatedOriginalSupply: baseSupply,
+          calculatedChoiceSaving: choiceSaving,
+          calculatedChoiceSupplySaving: choiceSupplySaving,
+          calculatedOtherSavings: normalSavingsTotal,
+          calculatedOtherSupplySavings: normalSupplySavingsTotal,
+          calculatedPriorDiscounts: discountDetails.map((item) => ({
+            name: item.name,
+            saving: item.calculatedSaving,
+            supplySaving: item.calculatedSupplySaving
+          }))
+        });
+      }
+
+      /* 4. 최종 원단위 절삭 ---------------------------------------------- */
+      const extraSaving = discountDetails.reduce((sum, item) => sum + item.calculatedSaving, 0);
+      const beforeTruncate = remainingGross;
+      const finalPlan = truncateWon ? truncateWonUnit(beforeTruncate) : beforeTruncate;
+      const truncateSaving = Math.max(0, beforeTruncate - finalPlan);
+
+      return {
+        base: baseGross,              // 기존 렌더링 호환
+        baseGross,
+        baseSupply,
+        carrier,
+        choiceRule,
+        choiceSaving,
+        choiceSupplySaving,
+        choiceRawSupplySaving: choice.rawSupplySaving,
+        afterChoice: afterChoiceGross, // 기존 렌더링 호환
+        afterChoiceGross,
+        afterChoiceSupply,
+        discountDetails,
+        normalSavingsTotal,
+        normalSupplySavingsTotal,
+        preAutoPayGross,
+        preAutoPaySupply,
+        extraSaving,
+        beforeTruncate,
+        truncateSaving,
+        finalPlan
+      };
+    }
+
+    /* ======================================================================
+       [7] 현재 요금제 계산
+       ====================================================================== */
+    function calculateCurrentSummary(state) {
+      const planCharge = calculatePlanCharge(
+        state.plan,
+        state.choiceEnabled,
+        state.choiceRule,
+        state.choiceBaseAdjustment,
+        state.carrier,
+        state.discounts,
+        state.truncateWon
+      );
+
+      const addonMonthly = state.addons.reduce((sum, addon) => sum + addon.price, 0);
+      const currentMonthly = planCharge.finalPlan + addonMonthly;
+
+      return {
+        state,
+        planCharge,
+        addonMonthly,
+        currentMonthly,
+        total24: currentMonthly * 24
+      };
+    }
+
+    /* ======================================================================
+       [8] 미래 견적 비교 계산
+       ====================================================================== */
+    function calculateComparison(currentSummary, futureState) {
+      const months = Math.max(1, futureState.compareMonths);
+      const requiredMonths = Math.min(futureState.plan.requiredMonths, months);
+      const afterMonths = Math.max(0, months - requiredMonths);
+
+      const currentTotal = currentSummary.currentMonthly * months;
+
+      // 기기 교체 후에도 유지된다고 체크한 현재 할인만 미래 요금제에 반영합니다.
+      const carriedDiscounts = currentSummary.state.discounts
+        .filter((discount) => discount.carryToFuture)
+        .filter((discount) => discount.carrierScope === "ANY" || discount.carrierScope === futureState.carrier)
+        .map((discount) => ({ ...discount }));
+
+      // 현재에서 유지되는 할인 + 구매 견적에서 새로 추가한 할인을 함께 적용합니다.
+      const futureDiscounts = [...carriedDiscounts, ...futureState.discounts];
+      const futureChoiceEnabled = futureState.choiceEnabled;
+      const initialCharge = calculatePlanCharge(
+        futureState.plan.initial,
+        futureChoiceEnabled,
+        futureState.choiceRule,
+        futureState.choiceBaseAdjustment,
+        futureState.carrier,
+        futureDiscounts,
+        futureState.truncateWon
+      );
+      const afterCharge = calculatePlanCharge(
+        futureState.plan.after,
+        futureChoiceEnabled,
+        futureState.choiceRule,
+        futureState.choiceBaseAdjustment,
+        futureState.carrier,
+        futureDiscounts,
+        futureState.truncateWon
+      );
+
+      const planCost = initialCharge.finalPlan * requiredMonths + afterCharge.finalPlan * afterMonths;
+      const rawPlanCost = futureState.plan.initial * requiredMonths + futureState.plan.after * afterMonths;
+      const choiceSaving = initialCharge.choiceSaving * requiredMonths + afterCharge.choiceSaving * afterMonths;
+      const extraSaving = initialCharge.extraSaving * requiredMonths + afterCharge.extraSaving * afterMonths;
+      const truncateSaving = initialCharge.truncateSaving * requiredMonths + afterCharge.truncateSaving * afterMonths;
+
+      // 단말기 입력칸은 '가격' 또는 '현금혜택' 중 하나의 의미만 가집니다.
+      // 가격이면 총비용에 더하고, 현금혜택이면 총비용에서 뺍니다.
+      const deviceIsPrice = futureState.device.valueMode === "price";
+      const financedPrincipal = deviceIsPrice ? futureState.device.value : 0;
+      const installmentFee = deviceIsPrice && futureState.device.installmentMonths > 0
+        ? financedPrincipal * (futureState.device.installmentFeeRate / 100)
+        : 0;
+      const devicePaymentTotal = financedPrincipal + installmentFee;
+      const deviceNetCost = deviceIsPrice ? devicePaymentTotal : -futureState.device.value;
+
+      const addonCost = futureState.addons.reduce((sum, addon) => {
+        return sum + addon.price * Math.min(months, addon.months);
+      }, 0);
+
+      const totalCost = deviceNetCost + planCost + addonCost + futureState.device.oneTimeCost;
+      const averageCost = totalCost / months;
+      const difference = totalCost - currentTotal;
+
+      const installmentMonthly = futureState.device.installmentMonths > 0
+        ? devicePaymentTotal / futureState.device.installmentMonths
+        : 0;
+
+      const monthRows = [];
+      for (let month = 1; month <= months; month += 1) {
+        const planMonthly = month <= requiredMonths ? initialCharge.finalPlan : afterCharge.finalPlan;
+        const addonMonthly = futureState.addons.reduce((sum, addon) => {
+          return sum + (month <= addon.months ? addon.price : 0);
+        }, 0);
+        const deviceMonthly = futureState.device.installmentMonths > 0 && month <= futureState.device.installmentMonths
+          ? installmentMonthly
+          : 0;
+
+        monthRows.push({
+          month,
+          plan: planMonthly,
+          addon: addonMonthly,
+          device: deviceMonthly,
+          total: planMonthly + addonMonthly + deviceMonthly
+        });
+      }
+
+      const firstMonthly = monthRows[0]?.total || 0;
+      const initialAddonMonthly = futureState.addons.reduce((sum, addon) => {
+        return sum + (1 <= addon.months ? addon.price : 0);
+      }, 0);
+      const afterStartMonth = requiredMonths + 1;
+      const afterAddonMonthly = futureState.addons.reduce((sum, addon) => {
+        return sum + (afterStartMonth <= addon.months ? addon.price : 0);
+      }, 0);
+      const afterDeviceMonthly = futureState.device.installmentMonths > 0 && afterStartMonth <= futureState.device.installmentMonths
+        ? installmentMonthly
+        : 0;
+      const afterMonthly = afterCharge.finalPlan + afterAddonMonthly + afterDeviceMonthly;
+
+      const statuses = [];
+      if (futureState.plan.requiredMonths > months) {
+        statuses.push(`초기 요금제 유지기간이 비교기간보다 길어 ${months}개월 전체에 초기 요금제를 적용했습니다.`);
+      }
+      if (futureState.device.installmentMonths > months) {
+        statuses.push(`단말기 할부는 비교기간 이후에도 ${futureState.device.installmentMonths - months}개월 더 이어집니다.`);
+      }
+      if (deviceNetCost < 0) {
+        statuses.push("현금혜택을 총 소비비용에서 차감했습니다.");
+      }
+
+      return {
+        months,
+        currentTotal,
+        carriedDiscounts,
+        initialCharge,
+        afterCharge,
+        rawPlanCost,
+        planCost,
+        choiceSaving,
+        extraSaving,
+        truncateSaving,
+        deviceNetCost,
+        addonCost,
+        oneTimeCost: futureState.device.oneTimeCost,
+        totalCost,
+        averageCost,
+        difference,
+        firstMonthly,
+        initialAddonMonthly,
+        afterMonthly,
+        afterAddonMonthly,
+        serviceOnlyMonthly: afterCharge.finalPlan,
+        monthRows,
+        statuses,
+        requiredMonths,
+        afterMonths
+      };
+    }
+
+    /* ======================================================================
+       [9] 현재 요금제 렌더링
+       ====================================================================== */
+    function renderCurrentSummary(summary) {
+      elements.currentSummaryCard.classList.remove("hidden");
+      const currentDetail = $("currentDetailContent");
+      const currentToggle = $("currentDetailToggle");
+      currentDetail?.classList.add("hidden");
+      if (currentToggle) {
+        currentToggle.textContent = "세부사항 확인";
+        currentToggle.setAttribute("aria-expanded", "false");
+      }
+      elements.currentSavedMonthly.textContent = won(summary.currentMonthly);
+      elements.currentSavedCarrier.textContent = CARRIER_LABELS[summary.state.carrier] || summary.state.carrier;
+      elements.currentSaved24Total.textContent = won(summary.total24);
+      elements.currentSavedAddonMonthly.textContent = won(summary.addonMonthly);
+      elements.currentSavedChoice.textContent = summary.state.choiceEnabled
+        ? `${summary.state.choiceRule === "sktLegacy" ? "기존 SKT 방식" : summary.state.choiceRule === "afterPlanDiscount" ? "요금약정 후 25%" : "25%"} · -${won(summary.planCharge.choiceSaving)}`
+        : "미적용";
+      elements.currentSavedExtraSaving.textContent = summary.planCharge.extraSaving > 0
+        ? `-${won(summary.planCharge.extraSaving)}`
+        : won(0);
+      if (summary.state.truncateWon) {
+        const truncated = Math.max(0, Number(summary.planCharge.truncateSaving) || 0);
+        const truncatedText = truncated.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+        elements.currentSavedTruncate.textContent = `${truncatedText}원 절삭`;
+      } else {
+        elements.currentSavedTruncate.textContent = "미적용";
+      }
+
+      if (summary.planCharge.discountDetails.length) {
+        elements.currentDiscountSummary.innerHTML = summary.planCharge.discountDetails.map((discount) => {
+          const autoPayDetail = discount.type === "autopay"
+            ? `<div class="discount-summary-note">대상 공급가 ${Number(discount.calculatedBaseSupply || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원 · 1% ${Number(discount.calculatedRawSupplySaving || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원 · VAT 포함 ${Number(discount.calculatedRawSaving || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원 → ${won(discount.calculatedSaving)}</div>`
+            : "";
+          return `
+            <div class="discount-summary-item">
+              <span>${escapeHtml(discountDescription(discount))}${discount.carryToFuture ? " · 기기교체 후 유지" : ""}</span>
+              <strong>월 -${won(discount.calculatedSaving)}</strong>
+              ${autoPayDetail}
+            </div>
+          `;
+        }).join("");
+      } else {
+        elements.currentDiscountSummary.innerHTML = "";
+      }
+
+      updateResultVisibility();
+      updateFutureDiscountPreview();
+    }
+
+    /* ======================================================================
+       [10] 여러 비교 카드 렌더링
+       ====================================================================== */
+    function choiceRuleLabel(rule) {
+      if (rule === "sktLegacy") return "기존 SKT 방식";
+      if (rule === "afterPlanDiscount") return "요금약정 후 25%";
+      return "25%";
+    }
+
+    function formatComparisonStageSaving(initialValue, afterValue, afterMonths) {
+      const initial = Number(initialValue) || 0;
+      const after = Number(afterValue) || 0;
+      if (!afterMonths) return `월 -${won(initial)}`;
+      if (Math.abs(initial - after) < 0.005) return `월 -${won(initial)}`;
+      return `초기 월 -${won(initial)} · 변경 후 월 -${won(after)}`;
+    }
+
+    function renderComparisonDiscountSummary(result, futureState) {
+      const lines = [];
+
+      if (futureState.choiceEnabled) {
+        const choiceLabel = `선택약정 (${choiceRuleLabel(futureState.choiceRule)})`;
+        lines.push(`
+          <div class="discount-summary-item">
+            <span>${escapeHtml(choiceLabel)}</span>
+            <strong>${formatComparisonStageSaving(result.initialCharge.choiceSaving, result.afterCharge.choiceSaving, result.afterMonths)}</strong>
+          </div>
+        `);
+      }
+
+      const initialDetails = Array.isArray(result.initialCharge.discountDetails) ? result.initialCharge.discountDetails : [];
+      const afterDetails = Array.isArray(result.afterCharge.discountDetails) ? result.afterCharge.discountDetails : [];
+      const detailMap = new Map();
+      const order = [];
+
+      function upsert(detail, phase) {
+        const key = detail.uid || `${detail.name}|${detail.type}|${detail.preset || ""}`;
+        if (!detailMap.has(key)) {
+          detailMap.set(key, { detail, initial: null, after: null });
+          order.push(key);
+        }
+        detailMap.get(key)[phase] = detail;
+      }
+
+      initialDetails.forEach((detail) => upsert(detail, "initial"));
+      afterDetails.forEach((detail) => upsert(detail, "after"));
+
+      order.forEach((key) => {
+        const entry = detailMap.get(key);
+        const baseDetail = entry.initial || entry.after;
+        const initialSaving = entry.initial?.calculatedSaving || 0;
+        const afterSaving = entry.after?.calculatedSaving || 0;
+        const amountText = formatComparisonStageSaving(initialSaving, afterSaving, result.afterMonths);
+        let note = "";
+
+        if (baseDetail?.type === "autopay") {
+          const notes = [];
+          if (entry.initial) {
+            notes.push(`초기 대상 공급가 ${Number(entry.initial.calculatedBaseSupply || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원 · 1% ${Number(entry.initial.calculatedRawSupplySaving || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원 · VAT 포함 ${Number(entry.initial.calculatedRawSaving || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원 → ${won(initialSaving)}`);
+          }
+          if (result.afterMonths && entry.after && Math.abs(afterSaving - initialSaving) > 0.005) {
+            notes.push(`변경 후 대상 공급가 ${Number(entry.after.calculatedBaseSupply || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원 · 1% ${Number(entry.after.calculatedRawSupplySaving || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원 · VAT 포함 ${Number(entry.after.calculatedRawSaving || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원 → ${won(afterSaving)}`);
+          }
+          note = notes.length ? `<div class="discount-summary-note">${notes.map(escapeHtml).join("<br>")}</div>` : "";
+        }
+
+        lines.push(`
+          <div class="discount-summary-item">
+            <span>${escapeHtml(discountDescription(baseDetail))}</span>
+            <strong>${amountText}</strong>
+            ${note}
+          </div>
+        `);
+      });
+
+      return lines.join("");
+    }
+
+    function comparisonCardHtml(comparison) {
+      const { id, futureState, result } = comparison;
+      const badgeText = result.difference > 0
+        ? `현재 유지 대비 +${won(result.difference)}`
+        : result.difference < 0
+          ? `현재 유지 대비 ${won(Math.abs(result.difference))} 절감`
+          : "현재 유지와 차이 없음";
+      const badgeClass = result.difference > 0 ? "negative" : result.difference < 0 ? "positive" : "";
+      const detailId = `comparison-detail-${id}`;
+      const discountSummary = renderComparisonDiscountSummary(result, futureState);
+
+      return `
+        <article class="card comparison-card" data-comparison-id="${id}">
+          <div class="result-card-header">
+            <strong>${escapeHtml(futureState.quoteName)} · ${escapeHtml(CARRIER_LABELS[futureState.carrier] || futureState.carrier)}</strong>
+            <button class="close-result" type="button" data-remove-id="${id}" aria-label="견적 삭제">×</button>
+          </div>
+          <div class="current-dual-hero">
+            <div class="current-highlight primary">
+              <div class="label">예상 월 평균 유지비</div>
+              <div class="amount">${won(result.averageCost)}</div>
+            </div>
+            <div class="current-highlight">
+              <div class="label">${result.months}개월 기준 예상 총 비용</div>
+              <div class="amount">${won(result.totalCost)}</div>
+            </div>
+          </div>
+          <div class="metric-grid">
+            <div class="metric"><div class="label">요금제 변경 전 월 유지비</div><div class="value">${won(result.firstMonthly)}</div></div>
+            <div class="metric"><div class="label">요금제 변경 후 월 유지비</div><div class="value">${won(result.afterMonthly)}</div></div>
+          </div>
+          <div class="difference-highlight">
+            <div class="label">현재 대비 예상 비용 (${result.months}개월 기준)</div>
+            <div class="amount ${badgeClass}">${result.difference > 0 ? "+" : result.difference < 0 ? "-" : "±"}${won(Math.abs(result.difference))}</div>
+          </div>
+          <div class="summary-detail-toggle-wrap">
+            <button class="summary-detail-toggle" type="button" data-detail-target="${detailId}">세부사항 확인</button>
+          </div>
+          <div id="${detailId}" class="summary-detail-content hidden">
+            <div class="breakdown">
+              <div class="breakdown-row"><span>단말기 실질비용</span><strong>${won(result.deviceNetCost)}</strong></div>
+              <div class="breakdown-row"><span>통신요금 합계</span><strong>${won(result.planCost)}</strong></div>
+              <div class="breakdown-row"><span>부가서비스 월합계 (초기)</span><strong>${won(result.initialAddonMonthly)}</strong></div>
+              <div class="breakdown-row"><span>부가서비스 합계</span><strong>${won(result.addonCost)}</strong></div>
+              <div class="breakdown-row"><span>기타 일회성 비용 (위약금 등)</span><strong>${won(result.oneTimeCost)}</strong></div>
+              <div class="breakdown-row"><span>선택약정 할인 합계</span><strong>${result.choiceSaving > 0 ? `-${won(result.choiceSaving)}` : won(0)}</strong></div>
+              <div class="breakdown-row"><span>할인 반영액 합계</span><strong>${result.extraSaving > 0 ? `-${won(result.extraSaving)}` : won(0)}</strong></div>
+              <div class="breakdown-row"><span>원단위 절삭 조정</span><strong>${result.truncateSaving > 0 ? `-${won(result.truncateSaving)}` : won(0)}</strong></div>
+              ${discountSummary ? `<div class="discount-summary-list">${discountSummary}</div>` : ""}
+            </div>
+            ${result.statuses.length ? `
+              <div class="status-list">${result.statuses.map((text) => `<div class="status-item">${escapeHtml(text)}</div>`).join("")}</div>
+            ` : ""}
+            <details>
+              <summary>월별 납부예상 상세보기</summary>
+              <div class="month-table-wrap">
+                <table>
+                  <thead><tr><th>월</th><th>요금제</th><th>부가서비스</th><th>단말기</th><th>합계</th></tr></thead>
+                  <tbody>
+                    ${result.monthRows.map((row) => `
+                      <tr>
+                        <td>${row.month}개월차</td>
+                        <td>${won(row.plan)}</td>
+                        <td>${won(row.addon)}</td>
+                        <td>${won(row.device)}</td>
+                        <td><strong>${won(row.total)}</strong></td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+        </article>
+      `;
+    }
+
+    function toggleSummaryDetail(button) {
+      const targetId = button?.dataset?.detailTarget;
+      if (!targetId) return;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+
+      const willOpen = target.classList.contains("hidden");
+      target.classList.toggle("hidden", !willOpen);
+      button.textContent = willOpen ? "세부사항 가리기" : "세부사항 확인";
+      button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    }
+
+    function renderComparisons() {
+      elements.comparisonList.innerHTML = appState.comparisons.map(comparisonCardHtml).join("");
+
+      // 삭제 버튼 이벤트는 bindEvents()의 이벤트 위임으로 처리합니다.
+      // 카드가 다시 그려져도 X 버튼이 항상 동작하도록 하기 위함입니다.
+      updateCompareButton();
+      refreshScheduleQuoteOptions();
+      updateResultVisibility();
+    }
+
+    function removeComparison(id) {
+      const target = appState.comparisons.find((item) => item.id === id);
+      if (!target) return;
+      if (!window.confirm(`'${target.futureState.quoteName}' 견적을 삭제하시겠습니까?`)) return;
+      appState.comparisons = appState.comparisons.filter((item) => item.id !== id);
+      renderComparisons();
+      showToast("견적을 삭제했습니다.");
+    }
+
+    function updateCompareButton() {
+      const quoteName = elements.quoteName.value.trim();
+      const normalizedName = quoteName.toLocaleLowerCase("ko-KR");
+      const duplicateName = !!quoteName && appState.comparisons.some((item) =>
+        item.futureState.quoteName.trim().toLocaleLowerCase("ko-KR") === normalizedName
+      );
+
+      const messages = [];
+      if (!appState.currentSaved) {
+        messages.push("현재 요금제를 먼저 저장해 주세요.");
+      } else if (appState.currentDirty) {
+        messages.push("변경된 현재 요금제 내용을 먼저 저장해 주세요.");
+      }
+
+      if (!quoteName) {
+        messages.push("견적명을 입력해 주세요.");
+      } else if (duplicateName) {
+        messages.push("이미 비교한 견적명입니다. 견적명을 변경해 주세요.");
+      }
+
+      elements.compareValidation.innerHTML = messages
+        .map((message) => `<div class="validation-message">${escapeHtml(message)}</div>`)
+        .join("");
+
+      elements.compareButton.disabled = messages.length > 0;
+
+      if (appState.comparisons.length === 0) {
+        elements.compareButton.textContent = "이 견적 비교";
+        elements.compareButton.classList.add("primary");
+      } else {
+        elements.compareButton.textContent = "이 견적도 추가 비교";
+        elements.compareButton.classList.remove("primary");
+      }
+    }
+
+    function updateResultVisibility() {
+      const hasCurrent = !!appState.currentSaved;
+      const hasComparisons = appState.comparisons.length > 0;
+      elements.resultPlaceholder.classList.toggle("hidden", hasCurrent || hasComparisons);
+      elements.resultTools.classList.toggle("hidden", !hasComparisons);
+    }
+
+    /* ======================================================================
+       [11] 현재 저장 / 비교 실행
+       ====================================================================== */
+    function markCurrentDirty() {
+      updateChoiceDiscountPreviews();
+      updateCurrentDiscountLivePreviews();
+      if (appState.currentSaved) {
+        appState.currentDirty = true;
+        elements.currentDirtyNote.classList.add("show");
+      }
+      updateCompareButton();
+      updateFutureDiscountPreview();
+    }
+
+    function saveCurrentSnapshot() {
+      // 이미 비교한 견적이 있는데 현재 기준을 바꾸면 기존 비교값의 기준이 달라집니다.
+      // 그래서 기준을 새로 저장할 때 기존 비교 견적을 함께 초기화할지 확인합니다.
+      if (appState.currentDirty && appState.comparisons.length) {
+        const ok = window.confirm("현재 요금제를 다시 저장하면 기존 비교 견적이 모두 초기화됩니다. 계속할까요?");
+        if (!ok) return;
+        appState.comparisons = [];
+        renderComparisons();
+      }
+
+      const summary = calculateCurrentSummary(readCurrentFormState());
+      appState.currentSaved = summary;
+      appState.currentDirty = false;
+      elements.currentDirtyNote.classList.remove("show");
+      renderCurrentSummary(summary);
+      // 구매 견적이 '현재 통신사와 동일'이면 새로 저장한 통신사에 맞춰 프리셋도 갱신합니다.
+      if (elements.futureCarrier.value === "SAME") syncFutureCarrierUI();
+      updateCompareButton();
+      showToast("현재 요금제를 저장했습니다.");
+    }
+
+    function compareQuote() {
+      if (!appState.currentSaved) {
+        showToast("먼저 현재 요금제를 저장해 주세요.");
+        return;
+      }
+      if (appState.currentDirty) {
+        showToast("현재 요금제가 변경되었습니다. 다시 저장해 주세요.");
+        return;
+      }
+
+      const futureState = readFutureFormState();
+      const result = calculateComparison(appState.currentSaved, futureState);
+      appState.comparisons.push({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        futureState,
+        result
+      });
+      renderComparisons();
+      showToast("비교 견적을 추가했습니다.");
+    }
+
+    /* ======================================================================
+       [12] 구매 후 할인 미리보기 / 통신사 UI 동기화
+       ====================================================================== */
+    function updateFutureDiscountPreview() {
+      const carrier = resolveFutureCarrier();
+      const discounts = appState.currentSaved && !appState.currentDirty
+        ? appState.currentSaved.state.discounts.filter((item) =>
+            item.carryToFuture && (item.carrierScope === "ANY" || item.carrierScope === carrier)
+          )
+        : [];
+
+      if (!discounts.length) {
+        elements.futureDiscountPreview.textContent = "현재에서 이어지는 할인 없음 · 필요하면 아래에서 새 할인을 추가하세요.";
+      } else {
+        elements.futureDiscountPreview.textContent = `현재에서 이어짐: ${discounts.map(discountDescription).join(" · ")}`;
+      }
+      updateDiscountLivePreviews("future");
+    }
+
+    function syncCurrentCarrierUI() {
+      syncChoiceRuleUI("current", true);
+      refreshDiscountPresetOptions("current");
+      updateCurrentDiscountLivePreviews();
+    }
+
+    function syncFutureCarrierUI() {
+      syncChoiceRuleUI("future", true);
+      refreshDiscountPresetOptions("future");
+      updateFutureDiscountPreview();
+      updateCompareButton();
+    }
+
+    function updateCurrentDiscountLivePreviews() {
+      updateDiscountLivePreviews("current");
+    }
+
+    function syncDeviceInputUI() {
+      const mode = getCheckedValue("deviceValueMode") || "price";
+      const isBenefit = mode === "benefit";
+
+      elements.deviceValueLabel.textContent = isBenefit ? "현금혜택" : "단말기 가격";
+
+      if (isBenefit) {
+        // 현금혜택은 일회성 차감값이므로 할부 개념을 적용하지 않습니다.
+        elements.installmentMonths.value = "0";
+        elements.installmentMonths.disabled = true;
+        elements.installmentFeeRate.value = "0";
+        elements.installmentFeeRate.disabled = true;
+      } else {
+        elements.installmentMonths.disabled = false;
+        elements.installmentFeeRate.disabled = elements.installmentMonths.value === "0";
+        if (elements.installmentMonths.value === "0") elements.installmentFeeRate.value = "0";
+      }
+    }
+
+    /* ======================================================================
+       [13] 비교 결과 이미지 저장
+       ----------------------------------------------------------------------
+       결과 화면의 카드 자체를 복제해 PNG로 저장합니다.
+       폭만 스마트폰용으로 줄이고 현재 라이트/다크 테마를 그대로 사용합니다.
+       하단에는 QR 없이 다시 접속할 수 있는 주소만 표시합니다.
+       ====================================================================== */
+    function loadExternalScript(src, globalName) {
+      return new Promise((resolve, reject) => {
+        if (window[globalName]) {
+          resolve();
+          return;
+        }
+        const existing = document.querySelector(`script[data-external="${globalName}"]`);
+        if (existing) {
+          existing.addEventListener("load", resolve, { once: true });
+          existing.addEventListener("error", reject, { once: true });
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.async = true;
+        script.dataset.external = globalName;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    async function ensureImageLibraries() {
+      await loadExternalScript(
+        "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+        "html2canvas"
+      );
+    }
+
+    function getReturnUrl() {
+      return /^https?:$/i.test(window.location.protocol)
+        ? window.location.href.split("#")[0]
+        : CANONICAL_PAGE_URL;
+    }
+
+    // 복제된 카드 안의 id는 원본과 중복될 필요가 없으므로 제거합니다.
+    function stripIds(root) {
+      if (root.removeAttribute) root.removeAttribute("id");
+      root.querySelectorAll?.("[id]").forEach((node) => node.removeAttribute("id"));
+    }
+
+    async function exportComparisonImage() {
+      if (!appState.currentSaved || !appState.comparisons.length) return;
+
+      elements.exportImageButton.disabled = true;
+      elements.exportImageButton.textContent = "이미지 만드는 중...";
+
+      try {
+        await ensureImageLibraries();
+
+        const returnUrl = getReturnUrl();
+        const sheet = document.createElement("div");
+        sheet.className = "export-sheet";
+
+        // 현재 결과 카드를 그대로 복제합니다.
+        const currentClone = elements.currentSummaryCard.cloneNode(true);
+        currentClone.classList.remove("hidden");
+        stripIds(currentClone);
+        sheet.appendChild(currentClone);
+
+        // 사용자가 화면에서 보고 있는 비교 카드들을 같은 순서/스타일로 복제합니다.
+        const comparisonStack = document.createElement("div");
+        comparisonStack.className = "stack";
+        [...elements.comparisonList.querySelectorAll(".comparison-card")].forEach((card) => {
+          const clone = card.cloneNode(true);
+          stripIds(clone);
+          comparisonStack.appendChild(clone);
+        });
+        sheet.appendChild(comparisonStack);
+
+        // QR 대신 주소만 넣습니다. 스마트폰의 텍스트/주소 인식 기능으로 다시 열 수 있습니다.
+        const address = document.createElement("div");
+        address.className = "export-address";
+        address.innerHTML = `<strong>계산기 주소</strong>${escapeHtml(returnUrl)}`;
+        sheet.appendChild(address);
+
+        elements.exportHost.appendChild(sheet);
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        const canvas = await window.html2canvas(sheet, {
+          // null로 두면 export-sheet의 실제 배경색을 사용하므로 다크모드도 그대로 저장됩니다.
+          backgroundColor: null,
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          windowWidth: 520,
+          scrollX: 0,
+          scrollY: 0
+        });
+
+        const link = document.createElement("a");
+        const stamp = new Date().toISOString().slice(0, 10);
+        link.download = `통신요금_비교결과_${stamp}.png`;
+        link.href = canvas.toDataURL("image/png");
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        sheet.remove();
+        showToast("비교 결과 이미지를 저장했습니다.");
+      } catch (error) {
+        console.error(error);
+        showToast("이미지 저장에 필요한 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.");
+      } finally {
+        elements.exportImageButton.disabled = false;
+        elements.exportImageButton.textContent = "비교 결과 이미지 저장";
+      }
+    }
+
+    /* ======================================================================
+       [14] 초기화 / 테마 / 이벤트
+       ====================================================================== */
+    /* ======================================================================
+       [V3] 견적 비교 / 해지일정 등록 화면 전환과 .ics 일정 생성
+       ====================================================================== */
+    function switchAppView(view) {
+      const schedule = view === "schedule";
+      elements.compareView.classList.toggle("hidden", schedule);
+      elements.scheduleView.classList.toggle("hidden", !schedule);
+      elements.compareTabButton.classList.toggle("active", !schedule);
+      elements.scheduleTabButton.classList.toggle("active", schedule);
+      if (schedule) {
+        refreshScheduleQuoteOptions();
+        updateScheduleDatePreviews();
+      }
+    }
+
+    function localTodayString() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+
+    // 1월 31일 + 1개월처럼 존재하지 않는 날짜는 다음 달의 마지막 날로 맞춥니다.
+    function addMonthsToDateString(dateString, months) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateString || ""));
+      if (!match) return "";
+      const year = Number(match[1]);
+      const month = Number(match[2]) - 1;
+      const day = Number(match[3]);
+      const add = Math.max(0, nonNegativeInteger(months));
+      const targetFirst = new Date(year, month + add, 1);
+      const targetYear = targetFirst.getFullYear();
+      const targetMonth = targetFirst.getMonth();
+      const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const safeDay = Math.min(day, lastDay);
+      return `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
+    }
+
+    function addDaysToDateString(dateString, days) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateString || ""));
+      if (!match) return "";
+      const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      date.setDate(date.getDate() + Number(days || 0));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    }
+
+    function dateLabel(dateString) {
+      if (!dateString) return "날짜 확인 필요";
+      const [y, m, d] = dateString.split("-");
+      return `${y}.${m}.${d}`;
+    }
+
+    function refreshScheduleQuoteOptions() {
+      const currentValue = elements.scheduleQuoteSource.value;
+      const options = [`<option value="DIRECT">직접 입력</option>`]
+        .concat(appState.comparisons.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.futureState.quoteName)}</option>`));
+      elements.scheduleQuoteSource.innerHTML = options.join("");
+      const exists = currentValue === "DIRECT" || appState.comparisons.some((item) => item.id === currentValue);
+      elements.scheduleQuoteSource.value = exists ? currentValue : "DIRECT";
+    }
+
+    function addScheduleAddonRow(data = {}) {
+      const row = document.createElement("div");
+      row.className = "schedule-row schedule-addon-row";
+      row.innerHTML = `
+        <input class="schedule-name schedule-addon-name" type="text" value="${escapeHtml(data.name || "")}" placeholder="부가서비스명" aria-label="부가서비스명" />
+        <div class="input-wrap has-suffix">
+          <input class="schedule-addon-months zero-friendly" type="number" min="0" step="1" value="${nonNegativeInteger(data.months || 0)}" aria-label="부가서비스 유지기간" />
+          <span class="suffix">개월</span>
+        </div>
+        <div class="schedule-date-preview schedule-addon-preview">-</div>
+        <div class="schedule-addon-actions" style="display:flex; gap:6px; justify-content:flex-end;">
+          <button class="button schedule-register-button schedule-addon-register" type="button">해지일 등록</button>
+          <button class="remove-button schedule-addon-remove" type="button" aria-label="부가서비스 일정 삭제">×</button>
+        </div>
+      `;
+      row.querySelectorAll("input").forEach((input) => {
+        input.addEventListener("input", updateScheduleDatePreviews);
+        input.addEventListener("change", updateScheduleDatePreviews);
+      });
+      row.querySelector(".schedule-addon-remove").addEventListener("click", () => {
+        row.remove();
+        updateScheduleDatePreviews();
+      });
+      row.querySelector(".schedule-addon-register").addEventListener("click", () => {
+        const name = row.querySelector(".schedule-addon-name").value.trim() || "부가서비스";
+        const months = nonNegativeInteger(row.querySelector(".schedule-addon-months").value);
+        const date = addMonthsToDateString(elements.scheduleContractDate.value, months);
+        downloadIcsFile([{
+          title: `${name} 해지 가능일 확인`,
+          date,
+          description: scheduleDescription([`부가서비스: ${name}`, `계약일: ${elements.scheduleContractDate.value}`, `유지기간: ${months}개월`, `계산된 확인일: ${date}`])
+        }], `${name}_해지일정.ics`);
+      });
+      elements.scheduleAddonList.appendChild(row);
+      updateScheduleDatePreviews();
+    }
+
+    function updateScheduleDatePreviews() {
+      const contractDate = elements.scheduleContractDate.value;
+      const contractMonths = nonNegativeInteger(elements.scheduleContractMonths.value);
+      const planMonths = nonNegativeInteger(elements.schedulePlanMonths.value);
+      elements.contractEndPreview.textContent = dateLabel(addMonthsToDateString(contractDate, contractMonths));
+      elements.planChangePreview.textContent = dateLabel(addMonthsToDateString(contractDate, planMonths));
+      elements.scheduleAddonList.querySelectorAll(".schedule-addon-row").forEach((row) => {
+        const months = nonNegativeInteger(row.querySelector(".schedule-addon-months").value);
+        row.querySelector(".schedule-addon-preview").textContent = dateLabel(addMonthsToDateString(contractDate, months));
+      });
+    }
+
+    function loadScheduleFromComparison(id) {
+      if (id === "DIRECT") return;
+      const comparison = appState.comparisons.find((item) => item.id === id);
+      if (!comparison) return;
+      elements.scheduleQuoteSource.value = id;
+      if (!elements.scheduleContractDate.value) elements.scheduleContractDate.value = localTodayString();
+      elements.scheduleContractMonths.value = comparison.futureState.compareMonths || 24;
+      elements.schedulePlanMonths.value = comparison.futureState.plan?.requiredMonths || 0;
+      elements.scheduleAddonList.innerHTML = "";
+      const addons = comparison.futureState.addons || [];
+      addons.forEach((addon) => addScheduleAddonRow({ name: addon.name, months: addon.months }));
+      updateScheduleDatePreviews();
+    }
+
+    function selectedScheduleQuoteName() {
+      const id = elements.scheduleQuoteSource.value;
+      if (!id || id === "DIRECT") return "";
+      return appState.comparisons.find((item) => item.id === id)?.futureState?.quoteName || "";
+    }
+
+    function scheduleDescription(lines) {
+      const quoteName = selectedScheduleQuoteName();
+      return [
+        ...(quoteName ? [`견적명: ${quoteName}`] : []),
+        ...lines,
+        "",
+        "통신요금 계산기에서 등록한 일정입니다.",
+        "실제 변경·해지 가능일은 계약 조건에 따라 다를 수 있으므로 변경 또는 해지 전에 실제 계약 내용을 확인하세요."
+      ].join("\n");
+    }
+
+    // 결과 도구는 비교 목록의 맨 아래에 있으므로 가장 마지막 견적을 '이 계약'으로 사용합니다.
+    function openScheduleFromLatestComparison() {
+      const comparison = appState.comparisons[appState.comparisons.length - 1];
+      if (!comparison) {
+        showToast("먼저 비교 견적을 만들어 주세요.");
+        return;
+      }
+      switchAppView("schedule");
+      refreshScheduleQuoteOptions();
+      loadScheduleFromComparison(comparison.id);
+      showToast(`'${comparison.futureState.quoteName}' 일정으로 불러왔습니다.`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setTimeout(() => elements.scheduleContractDate.focus({ preventScroll: true }), 250);
+    }
+
+    function icsEscape(value) {
+      return String(value ?? "")
+        .replace(/\\/g, "\\\\")
+        .replace(/\r?\n/g, "\\n")
+        .replace(/,/g, "\\,")
+        .replace(/;/g, "\\;");
+    }
+
+    function icsDate(dateString) {
+      return String(dateString || "").replaceAll("-", "");
+    }
+
+    function buildIcs(events) {
+      const now = new Date();
+      const stamp = `${now.getUTCFullYear()}${String(now.getUTCMonth()+1).padStart(2,"0")}${String(now.getUTCDate()).padStart(2,"0")}T${String(now.getUTCHours()).padStart(2,"0")}${String(now.getUTCMinutes()).padStart(2,"0")}${String(now.getUTCSeconds()).padStart(2,"0")}Z`;
+      const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//PhoneFeeCalc V3//KO", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
+      events.filter((event) => event.date).forEach((event, index) => {
+        const nextDate = addDaysToDateString(event.date, 1);
+        const uidSeed = `${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`;
+        lines.push(
+          "BEGIN:VEVENT",
+          `UID:${uidSeed}@phonefeecalc`,
+          `DTSTAMP:${stamp}`,
+          `DTSTART;VALUE=DATE:${icsDate(event.date)}`,
+          `DTEND;VALUE=DATE:${icsDate(nextDate)}`,
+          `SUMMARY:${icsEscape(event.title)}`,
+          `DESCRIPTION:${icsEscape(event.description || "실제 변경·해지 가능일은 계약 내용을 반드시 확인하세요.")}`,
+          "BEGIN:VALARM",
+          "TRIGGER:-P7D",
+          "ACTION:DISPLAY",
+          `DESCRIPTION:${icsEscape(`${event.title} · 7일 전 확인`)}`,
+          "END:VALARM",
+          "BEGIN:VALARM",
+          "TRIGGER:PT0M",
+          "ACTION:DISPLAY",
+          `DESCRIPTION:${icsEscape(`${event.title} · 오늘 확인`)}`,
+          "END:VALARM",
+          "END:VEVENT"
+        );
+      });
+      lines.push("END:VCALENDAR");
+      return lines.join("\r\n");
+    }
+
+    function downloadIcsFile(events, fileName) {
+      const valid = events.filter((event) => event.date);
+      if (!valid.length) {
+        showToast("계약일과 유지기간을 확인해 주세요.");
+        return;
+      }
+      const blob = new Blob([buildIcs(valid)], { type: "text/calendar;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast("캘린더 일정 파일을 만들었습니다.");
+    }
+
+    function currentScheduleEvents() {
+      const contractDate = elements.scheduleContractDate.value;
+      const contractMonths = nonNegativeInteger(elements.scheduleContractMonths.value);
+      const planMonths = nonNegativeInteger(elements.schedulePlanMonths.value);
+      const contractEndDate = addMonthsToDateString(contractDate, contractMonths);
+      const planChangeDate = addMonthsToDateString(contractDate, planMonths);
+      const events = [
+        {
+          title: "휴대폰 계약 만료일 확인",
+          date: contractEndDate,
+          description: scheduleDescription([`계약일: ${contractDate}`, `계약기간: ${contractMonths}개월`, `계산된 확인일: ${contractEndDate}`])
+        },
+        {
+          title: "요금제 변경 가능일 확인",
+          date: planChangeDate,
+          description: scheduleDescription([`계약일: ${contractDate}`, `요금제 유지기간: ${planMonths}개월`, `계산된 확인일: ${planChangeDate}`])
+        }
+      ];
+      elements.scheduleAddonList.querySelectorAll(".schedule-addon-row").forEach((row) => {
+        const name = row.querySelector(".schedule-addon-name").value.trim() || "부가서비스";
+        const months = nonNegativeInteger(row.querySelector(".schedule-addon-months").value);
+        const date = addMonthsToDateString(contractDate, months);
+        events.push({
+          title: `${name} 해지 가능일 확인`,
+          date,
+          description: scheduleDescription([`부가서비스: ${name}`, `계약일: ${contractDate}`, `유지기간: ${months}개월`, `계산된 확인일: ${date}`])
+        });
+      });
+      return events;
+    }
+
+    function resetForm() {
+      if (!window.confirm("현재 입력과 비교 결과를 초기화할까요?")) return;
+
+      elements.currentCarrier.value = "SKT";
+      setMoneyInput(elements.currentPlan, 69000);
+      elements.currentChoiceEnabled.checked = true;
+      syncChoiceRuleUI("current", false);
+      setMoneyInput(elements.currentChoiceBaseAdjustment, 0);
+      elements.currentTruncateWon.checked = true;
+      elements.currentDiscountList.innerHTML = "";
+      elements.currentAddonList.innerHTML = "";
+
+      elements.quoteName.value = "1번집 견적";
+      elements.futureCarrier.value = "SAME";
+      setRadioValue("compareMonths", "24");
+      elements.futureChoiceEnabled.checked = false;
+      syncChoiceRuleUI("future", false);
+      setMoneyInput(elements.futureChoiceBaseAdjustment, 0);
+      setRadioValue("deviceValueMode", "price");
+      setMoneyInput(elements.deviceValue, 0);
+      elements.installmentMonths.value = "0";
+      elements.installmentFeeRate.value = "0";
+      syncDeviceInputUI();
+      setMoneyInput(elements.oneTimeCost, 0);
+      setMoneyInput(elements.initialPlan, 105000);
+      elements.requiredMonths.value = "6";
+      setMoneyInput(elements.afterPlan, 69000);
+      elements.futureTruncateWon.checked = true;
+      elements.futureDiscountList.innerHTML = "";
+      elements.addonList.innerHTML = "";
+
+      elements.scheduleQuoteSource.value = "DIRECT";
+      elements.scheduleContractDate.value = localTodayString();
+      elements.scheduleContractMonths.value = "24";
+      elements.schedulePlanMonths.value = "6";
+      elements.scheduleAddonList.innerHTML = "";
+      updateScheduleDatePreviews();
+
+      appState.currentSaved = null;
+      appState.currentDirty = false;
+      appState.comparisons = [];
+      elements.currentDirtyNote.classList.remove("show");
+      elements.currentSummaryCard.classList.add("hidden");
+      renderComparisons();
+      updateFutureDiscountPreview();
+    }
+
+    function applyTheme(theme) {
+      document.body.dataset.theme = theme;
+      elements.themeButton.textContent = theme === "dark" ? "☀" : "☾";
+    }
+
+    function initializeTheme() {
+      const saved = storageGet(THEME_KEY);
+      const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+      applyTheme(saved || (systemDark ? "dark" : "light"));
+    }
+
+    function toggleTheme() {
+      const next = document.body.dataset.theme === "dark" ? "light" : "dark";
+      applyTheme(next);
+      storageSet(THEME_KEY, next);
+    }
+
+    let toastTimer;
+    function showToast(message) {
+      clearTimeout(toastTimer);
+      elements.toast.textContent = message;
+      elements.toast.classList.add("show");
+      toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 1900);
+    }
+
+    function bindEvents() {
+      elements.compareTabButton.addEventListener("click", () => switchAppView("compare"));
+      elements.scheduleTabButton.addEventListener("click", () => switchAppView("schedule"));
+      elements.scheduleQuoteSource.addEventListener("change", () => loadScheduleFromComparison(elements.scheduleQuoteSource.value));
+      [elements.scheduleContractDate, elements.scheduleContractMonths, elements.schedulePlanMonths].forEach((input) => {
+        input.addEventListener("input", updateScheduleDatePreviews);
+        input.addEventListener("change", updateScheduleDatePreviews);
+      });
+      elements.addScheduleAddonButton.addEventListener("click", () => addScheduleAddonRow());
+      elements.registerContractEndButton.addEventListener("click", () => {
+        const contractDate = elements.scheduleContractDate.value;
+        const months = nonNegativeInteger(elements.scheduleContractMonths.value);
+        const date = addMonthsToDateString(contractDate, months);
+        downloadIcsFile([{
+          title: "휴대폰 계약 만료일 확인",
+          date,
+          description: scheduleDescription([`계약일: ${contractDate}`, `계약기간: ${months}개월`, `계산된 확인일: ${date}`])
+        }], "휴대폰_계약만료일.ics");
+      });
+      elements.registerPlanChangeButton.addEventListener("click", () => {
+        const contractDate = elements.scheduleContractDate.value;
+        const months = nonNegativeInteger(elements.schedulePlanMonths.value);
+        const date = addMonthsToDateString(contractDate, months);
+        downloadIcsFile([{
+          title: "요금제 변경 가능일 확인",
+          date,
+          description: scheduleDescription([`계약일: ${contractDate}`, `요금제 유지기간: ${months}개월`, `계산된 확인일: ${date}`])
+        }], "요금제_변경일.ics");
+      });
+      elements.registerAllScheduleButton.addEventListener("click", () => downloadIcsFile(currentScheduleEvents(), "휴대폰_변경해지_전체일정.ics"));
+      document.querySelectorAll(".current-source").forEach((input) => {
+        input.addEventListener("input", markCurrentDirty);
+        input.addEventListener("change", markCurrentDirty);
+      });
+
+      bindZeroFriendlyInputs(document);
+
+      elements.addCurrentDiscountButton.addEventListener("click", () => {
+        addCurrentDiscountRow();
+        markCurrentDirty();
+      });
+      elements.addCurrentAddonButton.addEventListener("click", () => {
+        addCurrentAddonRow();
+        markCurrentDirty();
+      });
+      elements.addFutureDiscountButton.addEventListener("click", () => addFutureDiscountRow());
+      elements.addAddonButton.addEventListener("click", addFutureAddonRow);
+
+      elements.saveCurrentButton.addEventListener("click", saveCurrentSnapshot);
+      elements.compareButton.addEventListener("click", compareQuote);
+      elements.resetButton.addEventListener("click", resetForm);
+      elements.exportImageButton.addEventListener("click", exportComparisonImage);
+      elements.scheduleFromResultButton.addEventListener("click", openScheduleFromLatestComparison);
+      elements.themeButton.addEventListener("click", toggleTheme);
+      $("currentDetailToggle")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        toggleSummaryDetail(event.currentTarget);
+      });
+
+      // 비교 카드는 innerHTML로 계속 다시 그려집니다.
+      // 부모 요소에 한 번만 이벤트를 연결하는 '이벤트 위임'을 사용하면
+      // 새로 생성된 X 버튼도 빠짐없이 삭제 동작을 수행합니다.
+      elements.comparisonList.addEventListener("click", (event) => {
+        const removeButton = event.target.closest("[data-remove-id]");
+        if (removeButton && elements.comparisonList.contains(removeButton)) {
+          event.preventDefault();
+          event.stopPropagation();
+          removeComparison(removeButton.dataset.removeId);
+          return;
+        }
+
+        const detailButton = event.target.closest(".summary-detail-toggle[data-detail-target]");
+        if (detailButton && elements.comparisonList.contains(detailButton)) {
+          event.preventDefault();
+          toggleSummaryDetail(detailButton);
+        }
+      });
+
+      document.querySelectorAll('input[name="deviceValueMode"]').forEach((radio) => {
+        radio.addEventListener("change", syncDeviceInputUI);
+      });
+      elements.installmentMonths.addEventListener("change", syncDeviceInputUI);
+
+      elements.currentCarrier.addEventListener("change", () => {
+        syncCurrentCarrierUI();
+        markCurrentDirty();
+      });
+      elements.currentChoiceEnabled.addEventListener("change", () => syncChoiceRuleUI("current", true));
+      elements.currentChoiceRule.addEventListener("change", () => {
+        syncChoiceRuleUI("current", true);
+        markCurrentDirty();
+      });
+
+      elements.futureCarrier.addEventListener("change", syncFutureCarrierUI);
+      elements.futureChoiceEnabled.addEventListener("change", () => {
+        syncChoiceRuleUI("future", true);
+        updateDiscountLivePreviews("future");
+      });
+      elements.futureChoiceRule.addEventListener("change", () => {
+        syncChoiceRuleUI("future", true);
+        updateDiscountLivePreviews("future");
+      });
+      elements.futureChoiceBaseAdjustment.addEventListener("input", () => { updateChoiceDiscountPreviews(); updateDiscountLivePreviews("future"); });
+      elements.futureChoiceBaseAdjustment.addEventListener("change", () => { updateChoiceDiscountPreviews(); updateDiscountLivePreviews("future"); });
+      elements.initialPlan.addEventListener("input", () => { updateChoiceDiscountPreviews(); updateDiscountLivePreviews("future"); });
+      elements.initialPlan.addEventListener("change", () => { updateChoiceDiscountPreviews(); updateDiscountLivePreviews("future"); });
+      elements.afterPlan.addEventListener("input", updateChoiceDiscountPreviews);
+      elements.afterPlan.addEventListener("change", updateChoiceDiscountPreviews);
+
+      // 이미 비교한 견적명과 같은 이름을 입력하면 즉시 비교 버튼을 막고 이유를 표시합니다.
+      elements.quoteName.addEventListener("input", updateCompareButton);
+      elements.quoteName.addEventListener("change", updateCompareButton);
+    }
+
+    /* 프로그램 시작 */
+    initializeTheme();
+    elements.scheduleContractDate.value = localTodayString();
+    updateScheduleDatePreviews();
+    syncChoiceRuleUI("current", false);
+    syncChoiceRuleUI("future", false);
+    syncDeviceInputUI();
+    bindEvents();
+    renderComparisons();
+    updateChoiceDiscountPreviews();
+    updateCurrentDiscountLivePreviews();
+    updateFutureDiscountPreview();
+  </script>
+</body>
+</html>
